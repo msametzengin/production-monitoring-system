@@ -32,6 +32,44 @@ model Facility {
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
 
+  products FacilityProduct[]
+
   @@index([isActive])
   @@map("facilities")
+}
+
+model Product {
+  id              Int             @id @default(autoincrement())
+  code            String          @unique @db.VarChar(30)
+  name            String          @db.VarChar(120)
+  category        String?         @db.VarChar(100)
+  description     String?         @db.Text
+  measurementUnit MeasurementUnit @default(TON)
+  isActive        Boolean         @default(true)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  facilities FacilityProduct[]
+
+  @@index([isActive])
+  @@index([category])
+  @@map("products")
+}
+
+model FacilityProduct {
+  id                   Int      @id @default(autoincrement())
+  facilityId           Int
+  productId            Int
+  nominalDailyCapacity Decimal? @db.Decimal(12, 2)
+  isActive             Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  facility Facility @relation(fields: [facilityId], references: [id], onDelete: Restrict)
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@unique([facilityId, productId])
+  @@index([productId])
+  @@index([isActive])
+  @@map("facility_products")
 }

@@ -4,6 +4,16 @@ export const dynamic = "force-dynamic";
 
 export default async function Home() {
   const facilities = await prisma.facility.findMany({
+    include: {
+      products: {
+        where: {
+          isActive: true,
+        },
+        include: {
+          product: true,
+        },
+      },
+    },
     orderBy: {
       name: "asc",
     },
@@ -89,6 +99,35 @@ export default async function Home() {
                       <dd>{facility.plannedDailyMinutes / 60} saat</dd>
                     </div>
                   </dl>
+                  <div className="mt-5 border-t border-slate-800 pt-4">
+                    <p className="mb-3 text-sm text-slate-400">Üretilen ürünler</p>
+
+                    {facility.products.length === 0 ? (
+                      <p className="text-sm text-slate-500">
+                        Bu tesise bağlı ürün bulunmuyor.
+                      </p>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        {facility.products.map((facilityProduct) => (
+                          <span
+                            key={facilityProduct.id}
+                            className="rounded-full bg-blue-500/15 px-3 py-1 text-sm text-blue-300"
+                          >
+                            {facilityProduct.product.name}
+
+                            {facilityProduct.nominalDailyCapacity
+                              ? ` · ${Number(
+                                facilityProduct.nominalDailyCapacity,
+                              ).toLocaleString("tr-TR")} ${facilityProduct.product.measurementUnit === "TON"
+                                ? "ton/gün"
+                                : facilityProduct.product.measurementUnit
+                              }`
+                              : ""}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </article>
               ))}
             </div>
