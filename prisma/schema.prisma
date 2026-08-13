@@ -1,0 +1,37 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+enum MeasurementUnit {
+  TON
+  KILOGRAM
+  CUBIC_METER
+  UNIT
+}
+
+model Facility {
+  id                  Int             @id @default(autoincrement())
+  code                String          @unique @db.VarChar(20)
+  name                String          @db.VarChar(100)
+  location            String?         @db.VarChar(150)
+  description         String?         @db.Text
+  dailyCapacity       Decimal?        @db.Decimal(12, 2)
+  capacityUnit        MeasurementUnit @default(TON)
+  plannedDailyMinutes Int             @default(1440)
+  isActive            Boolean         @default(true)
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  @@index([isActive])
+  @@map("facilities")
+}
