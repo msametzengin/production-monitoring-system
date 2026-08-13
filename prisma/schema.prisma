@@ -19,6 +19,11 @@ enum MeasurementUnit {
   UNIT
 }
 
+enum RecordSource {
+  MANUAL
+  EXCEL_IMPORT
+}
+
 model Facility {
   id                  Int             @id @default(autoincrement())
   code                String          @unique @db.VarChar(20)
@@ -68,8 +73,49 @@ model FacilityProduct {
   facility Facility @relation(fields: [facilityId], references: [id], onDelete: Restrict)
   product  Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
 
+  productionRecords ProductionRecord[]
+
   @@unique([facilityId, productId])
   @@index([productId])
   @@index([isActive])
   @@map("facility_products")
+}
+
+model Shift {
+  id             Int      @id @default(autoincrement())
+  code           String   @unique @db.VarChar(20)
+  name           String   @db.VarChar(80)
+  startMinute    Int
+  endMinute      Int
+  plannedMinutes Int
+  sortOrder      Int      @default(0)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  productionRecords ProductionRecord[]
+
+  @@index([isActive, sortOrder])
+  @@map("shifts")
+}
+
+model ProductionRecord {
+  id                Int          @id @default(autoincrement())
+  recordDate        DateTime     @db.Date
+  facilityProductId Int
+  shiftId           Int
+  quantity          Decimal      @db.Decimal(14, 3)
+  operatingMinutes  Int
+  source            RecordSource @default(MANUAL)
+  notes             String?      @db.Text
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  facilityProduct FacilityProduct @relation(fields: [facilityProductId], references: [id], onDelete: Restrict)
+  shift           Shift           @relation(fields: [shiftId], references: [id], onDelete: Restrict)
+
+  @@unique([recordDate, facilityProductId, shiftId])
+  @@index([facilityProductId, recordDate])
+  @@index([shiftId, recordDate])
+  @@map("production_records")
 }

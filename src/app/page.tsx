@@ -1,5 +1,12 @@
 import { prisma } from "@/lib/prisma";
 
+const measurementUnitLabels = {
+  TON: "ton",
+  KILOGRAM: "kg",
+  CUBIC_METER: "m³",
+  UNIT: "adet",
+} as const;
+
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
@@ -16,6 +23,27 @@ export default async function Home() {
     },
     orderBy: {
       name: "asc",
+    },
+  });
+
+  const productionRecords = await prisma.productionRecord.findMany({
+    take: 10,
+    orderBy: [
+      {
+        recordDate: "desc",
+      },
+      {
+        createdAt: "desc",
+      },
+    ],
+    include: {
+      shift: true,
+      facilityProduct: {
+        include: {
+          facility: true,
+          product: true,
+        },
+      },
     },
   });
 
@@ -90,7 +118,7 @@ export default async function Home() {
                         {facility.dailyCapacity
                           ? Number(facility.dailyCapacity).toLocaleString("tr-TR")
                           : "Belirtilmedi"}{" "}
-                        {facility.capacityUnit === "TON" ? "ton" : ""}
+                        {measurementUnitLabels[facility.capacityUnit]}
                       </dd>
                     </div>
 
@@ -118,9 +146,9 @@ export default async function Home() {
                             {facilityProduct.nominalDailyCapacity
                               ? ` · ${Number(
                                 facilityProduct.nominalDailyCapacity,
-                              ).toLocaleString("tr-TR")} ${facilityProduct.product.measurementUnit === "TON"
-                                ? "ton/gün"
-                                : facilityProduct.product.measurementUnit
+                              ).toLocaleString("tr-TR")} ${`${measurementUnitLabels[
+                              facilityProduct.product.measurementUnit
+                              ]}/gün`
                               }`
                               : ""}
                           </span>
@@ -130,6 +158,87 @@ export default async function Home() {
                   </div>
                 </article>
               ))}
+            </div>
+          )}
+        </section>
+        <section className="mt-10">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-xl font-semibold">Son Üretim Kayıtları</h2>
+
+            <span className="rounded-full bg-slate-800 px-3 py-1 text-sm">
+              {productionRecords.length} kayıt
+            </span>
+          </div>
+
+          {productionRecords.length === 0 ? (
+            <div className="rounded-xl border border-slate-800 p-8 text-slate-400">
+              Henüz üretim kaydı bulunmuyor.
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-xl border border-slate-800">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-slate-900 text-slate-400">
+                  <tr>
+                    <th className="px-4 py-3 font-medium">Tarih</th>
+                    <th className="px-4 py-3 font-medium">Tesis</th>
+                    <th className="px-4 py-3 font-medium">Ürün</th>
+                    <th className="px-4 py-3 font-medium">Vardiya</th>
+                    <th className="px-4 py-3 text-right font-medium">Üretim</th>
+                    <th className="px-4 py-3 text-right font-medium">Çalışma</th>
+                    <th className="px-4 py-3 text-right font-medium">Oran</th>
+                  </tr>
+                </thead>
+
+                <tbody className="divide-y divide-slate-800 bg-slate-900/50">
+                  {productionRecords.map((record) => {
+                    const operatingRate =
+                      record.shift.plannedMinutes > 0
+                        ? Math.round(
+                          (record.operatingMinutes /
+                            record.shift.plannedMinutes) *
+                          100,
+                        )
+                        : 0;
+
+                    return (
+                      <tr key={record.id}>
+                        <td className="whitespace-nowrap px-4 py-3">
+                          {record.recordDate.toLocaleDateString("tr-TR", {
+                            timeZone: "UTC",
+                          })}
+                        </td>
+
+                        <td className="px-4 py-3">
+                          {record.facilityProduct.facility.name}
+                        </td>
+
+                        <td className="px-4 py-3">
+                          {record.facilityProduct.product.name}
+                        </td>
+
+                        <td className="whitespace-nowrap px-4 py-3">
+                          {record.shift.name}
+                        </td>
+
+                        <td className="whitespace-nowrap px-4 py-3 text-right font-medium">
+                          {Number(record.quantity).toLocaleString("tr-TR")}{" "}
+                          {measurementUnitLabels[
+                            record.facilityProduct.product.measurementUnit
+                          ]}
+                        </td>
+
+                        <td className="whitespace-nowrap px-4 py-3 text-right">
+                          {record.operatingMinutes} dk
+                        </td>
+
+                        <td className="whitespace-nowrap px-4 py-3 text-right text-emerald-400">
+                          %{operatingRate}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
         </section>
