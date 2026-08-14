@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import Link from "next/link";
 
 const measurementUnitLabels = {
   TON: "ton",
@@ -52,9 +53,18 @@ export default async function ProductionPage() {
               </p>
             </div>
 
-            <span className="rounded-full bg-slate-800 px-3 py-1 text-sm">
-              {productionRecords.length} kayıt
-            </span>
+            <div className="flex items-center gap-3">
+              <span className="rounded-full bg-slate-800 px-3 py-1 text-sm">
+                {productionRecords.length} kayıt
+              </span>
+
+              <Link
+                href="/production/new"
+                className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950 transition hover:bg-emerald-400"
+              >
+                Yeni üretim kaydı
+              </Link>
+            </div>
           </div>
         </header>
 
@@ -86,10 +96,10 @@ export default async function ProductionPage() {
                   const operatingRate =
                     record.shift.plannedMinutes > 0
                       ? Math.round(
-                          (record.operatingMinutes /
-                            record.shift.plannedMinutes) *
-                            100,
-                        )
+                        (record.operatingMinutes /
+                          record.shift.plannedMinutes) *
+                        100,
+                      )
                       : 0;
 
                   return (
@@ -116,7 +126,7 @@ export default async function ProductionPage() {
                         {Number(record.quantity).toLocaleString("tr-TR")}{" "}
                         {
                           measurementUnitLabels[
-                            record.facilityProduct.product.measurementUnit
+                          record.facilityProduct.product.measurementUnit
                           ]
                         }
                       </td>
