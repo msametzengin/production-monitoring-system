@@ -24,6 +24,29 @@ enum RecordSource {
   EXCEL_IMPORT
 }
 
+enum TargetPeriod {
+  DAILY
+  WEEKLY
+  MONTHLY
+  CUSTOM
+}
+
+enum DowntimeType {
+  PLANNED
+  UNPLANNED
+}
+
+enum DowntimeCategory {
+  MAINTENANCE
+  BREAKDOWN
+  ENERGY
+  RAW_MATERIAL
+  PERSONNEL
+  CLEANING
+  PROCESS
+  OTHER
+}
+
 model Facility {
   id                  Int             @id @default(autoincrement())
   code                String          @unique @db.VarChar(20)
@@ -37,7 +60,8 @@ model Facility {
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
 
-  products FacilityProduct[]
+  products        FacilityProduct[]
+  downtimeRecords DowntimeRecord[]
 
   @@index([isActive])
   @@map("facilities")
@@ -74,6 +98,7 @@ model FacilityProduct {
   product  Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
 
   productionRecords ProductionRecord[]
+  productionTargets ProductionTarget[]
 
   @@unique([facilityId, productId])
   @@index([productId])
@@ -118,4 +143,63 @@ model ProductionRecord {
   @@index([facilityProductId, recordDate])
   @@index([shiftId, recordDate])
   @@map("production_records")
+}
+
+model ProductionTarget {
+  id                Int          @id @default(autoincrement())
+  facilityProductId Int
+  period            TargetPeriod
+  startDate         DateTime     @db.Date
+  endDate           DateTime     @db.Date
+  targetQuantity    Decimal      @db.Decimal(14, 3)
+  notes             String?      @db.Text
+  isActive          Boolean      @default(true)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  facilityProduct FacilityProduct @relation(fields: [facilityProductId], references: [id], onDelete: Restrict)
+
+  @@unique([facilityProductId, period, startDate, endDate])
+  @@index([facilityProductId, startDate, endDate])
+  @@index([isActive, startDate, endDate])
+  @@map("production_targets")
+}
+
+model DowntimeReason {
+  id          Int              @id @default(autoincrement())
+  code        String           @unique @db.VarChar(30)
+  name        String           @db.VarChar(120)
+  category    DowntimeCategory
+  defaultType DowntimeType
+  description String?          @db.Text
+  isActive    Boolean          @default(true)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  downtimeRecords DowntimeRecord[]
+
+  @@index([category, isActive])
+  @@map("downtime_reasons")
+}
+
+model DowntimeRecord {
+  id               Int          @id @default(autoincrement())
+  facilityId       Int
+  downtimeReasonId Int
+  type             DowntimeType
+  startedAt        DateTime
+  endedAt          DateTime
+  durationMinutes  Int
+  source           RecordSource @default(MANUAL)
+  notes            String?      @db.Text
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  facility       Facility       @relation(fields: [facilityId], references: [id], onDelete: Restrict)
+  downtimeReason DowntimeReason @relation(fields: [downtimeReasonId], references: [id], onDelete: Restrict)
+
+  @@index([facilityId, startedAt])
+  @@index([downtimeReasonId, startedAt])
+  @@index([type, startedAt])
+  @@map("downtime_records")
 }

@@ -47,6 +47,90 @@ export default async function Home() {
     },
   });
 
+  const productionTargets = await prisma.productionTarget.findMany({
+    where: {
+      isActive: true,
+    },
+    take: 10,
+    orderBy: {
+      startDate: "desc",
+    },
+    include: {
+      facilityProduct: {
+        include: {
+          facility: true,
+          product: true,
+        },
+      },
+    },
+  });
+
+  const targetSummaries = await Promise.all(
+    productionTargets.map(async (target) => {
+      const productionSummary = await prisma.productionRecord.aggregate({
+        where: {
+          facilityProductId: target.facilityProductId,
+          recordDate: {
+            gte: target.startDate,
+            lte: target.endDate,
+          },
+        },
+        _sum: {
+          quantity: true,
+        },
+      });
+
+      const actualQuantity = Number(productionSummary._sum.quantity ?? 0);
+      const targetQuantity = Number(target.targetQuantity);
+
+      const realizationRate =
+        targetQuantity > 0
+          ? Math.round((actualQuantity / targetQuantity) * 1000) / 10
+          : 0;
+
+      return {
+        ...target,
+        actualQuantity,
+        targetQuantity,
+        realizationRate,
+      };
+    }),
+  );
+
+  const downtimeRecords = await prisma.downtimeRecord.findMany({
+    orderBy: {
+      startedAt: "desc",
+    },
+    include: {
+      facility: true,
+      downtimeReason: true,
+    },
+  });
+
+  const downtimeSummary = downtimeRecords.reduce(
+    (summary, record) => {
+      summary.total += record.durationMinutes;
+
+      if (record.type === "PLANNED") {
+        summary.planned += record.durationMinutes;
+      } else {
+        summary.unplanned += record.durationMinutes;
+      }
+
+      return summary;
+    },
+    {
+      total: 0,
+      planned: 0,
+      unplanned: 0,
+    },
+  );
+
+  const totalOperatingMinutes = productionRecords.reduce(
+    (total, record) => total + record.operatingMinutes,
+    0,
+  );
+
   return (
     <main className="min-h-screen bg-slate-950 px-6 py-12 text-slate-100">
       <div className="mx-auto max-w-5xl">
@@ -63,6 +147,133 @@ export default async function Home() {
             MySQL veritabanında kayıtlı tesisler
           </p>
         </header>
+        <section className="mb-10">
+          <h2 className="mb-4 text-xl font-semibold">Üretim Özeti</h2>
+
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <article className="rounded-xl border border-slate-800 bg-slate-900 p-5">
+              <p className="text-sm text-slate-400">Çalışma süresi</p>
+              <p className="mt-2 text-2xl font-bold text-emerald-400">
+                {totalOperatingMinutes} dk
+              </p>
+            </article>
+
+            <article className="rounded-xl border border-slate-800 bg-slate-900 p-5">
+              <p className="text-sm text-slate-400">Toplam duruş</p>
+              <p className="mt-2 text-2xl font-bold">
+                {downtimeSummary.total} dk
+              </p>
+            </article>
+
+            <article className="rounded-xl border border-slate-800 bg-slate-900 p-5">
+              <p className="text-sm text-slate-400">Planlı duruş</p>
+              <p className="mt-2 text-2xl font-bold text-amber-400">
+                {downtimeSummary.planned} dk
+              </p>
+            </article>
+
+            <article className="rounded-xl border border-slate-800 bg-slate-900 p-5">
+              <p className="text-sm text-slate-400">Plansız duruş</p>
+              <p className="mt-2 text-2xl font-bold text-red-400">
+                {downtimeSummary.unplanned} dk
+              </p>
+            </article>
+          </div>
+
+          <div className="mt-6">
+            <h3 className="mb-4 text-lg font-semibold">
+              Hedef - Gerçekleşen Üretim
+            </h3>
+
+            {targetSummaries.length === 0 ? (
+              <div className="rounded-xl border border-slate-800 p-8 text-slate-400">
+                Henüz üretim hedefi bulunmuyor.
+              </div>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2">
+                {targetSummaries.map((target) => (
+                  <article
+                    key={target.id}
+                    className="rounded-xl border border-slate-800 bg-slate-900 p-6"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="font-semibold">
+                          {target.facilityProduct.product.name}
+                        </p>
+
+                        <p className="mt-1 text-sm text-slate-400">
+                          {target.facilityProduct.facility.name}
+                        </p>
+                      </div>
+
+                      <span
+                        className={
+                          target.realizationRate >= 100
+                            ? "rounded-full bg-emerald-500/15 px-3 py-1 text-sm text-emerald-400"
+                            : "rounded-full bg-amber-500/15 px-3 py-1 text-sm text-amber-400"
+                        }
+                      >
+                        %
+                        {target.realizationRate.toLocaleString("tr-TR", {
+                          maximumFractionDigits: 1,
+                        })}
+                      </span>
+                    </div>
+
+                    <p className="mt-4 text-sm text-slate-400">
+                      {target.startDate.toLocaleDateString("tr-TR", {
+                        timeZone: "UTC",
+                      })}
+                      {" - "}
+                      {target.endDate.toLocaleDateString("tr-TR", {
+                        timeZone: "UTC",
+                      })}
+                    </p>
+
+                    <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-800">
+                      <div
+                        className="h-full rounded-full bg-emerald-500"
+                        style={{
+                          width: `${Math.min(
+                            Math.max(target.realizationRate, 0),
+                            100,
+                          )}%`,
+                        }}
+                      />
+                    </div>
+
+                    <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <p className="text-slate-400">Hedef</p>
+                        <p className="mt-1 font-semibold">
+                          {target.targetQuantity.toLocaleString("tr-TR")}{" "}
+                          {
+                            measurementUnitLabels[
+                            target.facilityProduct.product.measurementUnit
+                            ]
+                          }
+                        </p>
+                      </div>
+
+                      <div className="text-right">
+                        <p className="text-slate-400">Gerçekleşen</p>
+                        <p className="mt-1 font-semibold">
+                          {target.actualQuantity.toLocaleString("tr-TR")}{" "}
+                          {
+                            measurementUnitLabels[
+                            target.facilityProduct.product.measurementUnit
+                            ]
+                          }
+                        </p>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
 
         <section>
           <div className="mb-4 flex items-center justify-between">
