@@ -88,6 +88,7 @@ export default async function ProductionPage() {
                   <th className="px-4 py-3 text-right font-medium">Oran</th>
                   <th className="px-4 py-3 font-medium">Kaynak</th>
                   <th className="px-4 py-3 font-medium">Not</th>
+                  <th className="px-4 py-3 font-medium">İşlem</th>
                 </tr>
               </thead>
 
@@ -145,6 +146,14 @@ export default async function ProductionPage() {
 
                       <td className="min-w-48 px-4 py-3 text-slate-400">
                         {record.notes ?? "—"}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3">
+                        <Link
+                          href={`/production/${record.id}/edit`}
+                          className="font-medium text-emerald-400 transition hover:text-emerald-300"
+                        >
+                          Düzenle
+                        </Link>
                       </td>
                     </tr>
                   );
