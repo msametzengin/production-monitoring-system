@@ -26,4 +26,4 @@ Eti Maden Kütahya Emet işletmesindeki staj kapsamında geliştirilen üretim i
 
 ## Proje Durumu
 
-Veritabanı altyapısı, tesis–ürün ilişkileri, vardiyalar ve temel üretim kayıtları tamamlandı. Geliştirme devam ediyor.
+Hala geliştirme sürecinde.
