@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import Link from "next/link";
 
 const measurementUnitLabels = {
   TON: "ton",
@@ -53,9 +54,18 @@ export default async function ProductsPage() {
               </p>
             </div>
 
-            <span className="rounded-full bg-slate-800 px-3 py-1 text-sm">
-              {products.length} ürün
-            </span>
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <span className="rounded-full bg-slate-800 px-3 py-1 text-sm">
+                {products.length} ürün
+              </span>
+
+              <Link
+                href="/products/new"
+                className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950 transition hover:bg-emerald-400"
+              >
+                Yeni ürün
+              </Link>
+            </div>
           </div>
         </header>
 
@@ -98,15 +108,30 @@ export default async function ProductsPage() {
                       </p>
                     </div>
 
-                    <span
-                      className={
-                        product.isActive
-                          ? "rounded-full bg-emerald-500/15 px-3 py-1 text-sm text-emerald-400"
-                          : "rounded-full bg-red-500/15 px-3 py-1 text-sm text-red-400"
-                      }
-                    >
-                      {product.isActive ? "Aktif" : "Pasif"}
-                    </span>
+                    <div className="flex flex-col items-end gap-3">
+                      <span
+                        className={
+                          product.isActive
+                            ? "rounded-full bg-emerald-500/15 px-3 py-1 text-sm text-emerald-400"
+                            : "rounded-full bg-red-500/15 px-3 py-1 text-sm text-red-400"
+                        }
+                      >
+                        {product.isActive ? "Aktif" : "Pasif"}
+                      </span>
+
+                      <Link
+                        href={`/products/${product.id}/edit`}
+                        className="text-sm font-medium text-emerald-400 transition hover:text-emerald-300"
+                      >
+                        Düzenle
+                      </Link>
+                      <Link
+                        href={`/products/${product.id}/facilities`}
+                        className="text-sm font-medium text-blue-400 transition hover:text-blue-300"
+                      >
+                        Tesis ilişkileri
+                      </Link>
+                    </div>
                   </div>
 
                   {product.description && (
