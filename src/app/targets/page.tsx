@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 
 const measurementUnitLabels = {
@@ -17,45 +18,52 @@ const periodLabels = {
 export const dynamic = "force-dynamic";
 
 export default async function TargetsPage() {
-  const productionTargets = await prisma.productionTarget.findMany({
-    where: {
-      isActive: true,
-    },
-    orderBy: {
-      startDate: "desc",
-    },
-    include: {
-      facilityProduct: {
-        include: {
-          facility: true,
-          product: true,
+  const productionTargets =
+    await prisma.productionTarget.findMany({
+      orderBy: {
+        startDate: "desc",
+      },
+      include: {
+        facilityProduct: {
+          include: {
+            facility: true,
+            product: true,
+          },
         },
       },
-    },
-  });
+    });
 
   const targetSummaries = await Promise.all(
     productionTargets.map(async (target) => {
-      const productionSummary = await prisma.productionRecord.aggregate({
-        where: {
-          archivedAt: null,
-          facilityProductId: target.facilityProductId,
-          recordDate: {
-            gte: target.startDate,
-            lte: target.endDate,
+      const productionSummary =
+        await prisma.productionRecord.aggregate({
+          where: {
+            archivedAt: null,
+            facilityProductId:
+              target.facilityProductId,
+            recordDate: {
+              gte: target.startDate,
+              lte: target.endDate,
+            },
           },
-        },
-        _sum: {
-          quantity: true,
-        },
-      });
+          _sum: {
+            quantity: true,
+          },
+        });
 
-      const actualQuantity = Number(productionSummary._sum.quantity ?? 0);
-      const targetQuantity = Number(target.targetQuantity);
+      const actualQuantity = Number(
+        productionSummary._sum.quantity ?? 0,
+      );
+
+      const targetQuantity = Number(
+        target.targetQuantity,
+      );
 
       const realizationRate =
         targetQuantity > 0
-          ? Math.round((actualQuantity / targetQuantity) * 1000) / 10
+          ? Math.round(
+              (actualQuantity / targetQuantity) * 1000,
+            ) / 10
           : 0;
 
       return {
@@ -67,6 +75,10 @@ export default async function TargetsPage() {
     }),
   );
 
+  const activeTargetCount = targetSummaries.filter(
+    (target) => target.isActive,
+  ).length;
+
   return (
     <main className="min-h-screen bg-slate-950 px-6 py-10">
       <div className="mx-auto max-w-7xl">
@@ -75,18 +87,31 @@ export default async function TargetsPage() {
             Planlama
           </p>
 
-          <div className="mt-2 flex items-end justify-between gap-4">
+          <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
             <div>
-              <h1 className="text-3xl font-bold">Üretim Hedefleri</h1>
+              <h1 className="text-3xl font-bold">
+                Üretim Hedefleri
+              </h1>
 
               <p className="mt-2 text-slate-400">
-                Hedef ve gerçekleşen üretim karşılaştırmaları
+                Hedef ve gerçekleşen üretim
+                karşılaştırmaları
               </p>
             </div>
 
-            <span className="rounded-full bg-slate-800 px-3 py-1 text-sm">
-              {targetSummaries.length} hedef
-            </span>
+            <div className="flex items-center gap-3">
+              <span className="rounded-full bg-slate-800 px-3 py-1 text-sm">
+                {activeTargetCount} aktif /{" "}
+                {targetSummaries.length} toplam
+              </span>
+
+              <Link
+                href="/targets/new"
+                className="rounded-lg bg-emerald-500 px-4 py-2.5 text-sm font-medium text-slate-950 transition hover:bg-emerald-400"
+              >
+                Yeni hedef
+              </Link>
+            </div>
           </div>
         </header>
 
@@ -99,13 +124,18 @@ export default async function TargetsPage() {
             {targetSummaries.map((target) => {
               const unit =
                 measurementUnitLabels[
-                target.facilityProduct.product.measurementUnit
+                  target.facilityProduct.product
+                    .measurementUnit
                 ];
 
               return (
                 <article
                   key={target.id}
-                  className="rounded-xl border border-slate-800 bg-slate-900 p-6"
+                  className={`rounded-xl border bg-slate-900 p-6 ${
+                    target.isActive
+                      ? "border-slate-800"
+                      : "border-slate-800 opacity-70"
+                  }`}
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div>
@@ -114,44 +144,87 @@ export default async function TargetsPage() {
                       </p>
 
                       <h2 className="mt-1 text-xl font-semibold">
-                        {target.facilityProduct.product.name}
+                        {
+                          target.facilityProduct.product
+                            .name
+                        }
                       </h2>
 
                       <p className="mt-1 text-sm text-slate-400">
-                        {target.facilityProduct.facility.name}
+                        {
+                          target.facilityProduct.facility
+                            .name
+                        }
                       </p>
                     </div>
 
-                    <span
-                      className={
-                        target.realizationRate >= 100
-                          ? "rounded-full bg-emerald-500/15 px-3 py-1 text-sm text-emerald-400"
-                          : "rounded-full bg-amber-500/15 px-3 py-1 text-sm text-amber-400"
-                      }
-                    >
-                      %
-                      {target.realizationRate.toLocaleString("tr-TR", {
-                        maximumFractionDigits: 1,
-                      })}
-                    </span>
+                    <div className="flex flex-col items-end gap-2">
+                      <span
+                        className={
+                          target.isActive
+                            ? "rounded-full bg-emerald-500/15 px-3 py-1 text-xs text-emerald-400"
+                            : "rounded-full bg-slate-700 px-3 py-1 text-xs text-slate-300"
+                        }
+                      >
+                        {target.isActive
+                          ? "Aktif"
+                          : "Pasif"}
+                      </span>
+
+                      <span
+                        className={
+                          target.realizationRate >= 100
+                            ? "rounded-full bg-emerald-500/15 px-3 py-1 text-sm text-emerald-400"
+                            : "rounded-full bg-amber-500/15 px-3 py-1 text-sm text-amber-400"
+                        }
+                      >
+                        %
+                        {target.realizationRate.toLocaleString(
+                          "tr-TR",
+                          {
+                            maximumFractionDigits: 1,
+                          },
+                        )}
+                      </span>
+
+                      <Link
+                        href={`/targets/${target.id}/edit`}
+                        className="text-sm font-medium text-blue-400 transition hover:text-blue-300"
+                      >
+                        Düzenle
+                      </Link>
+                    </div>
                   </div>
 
                   <p className="mt-5 text-sm text-slate-400">
-                    {target.startDate.toLocaleDateString("tr-TR", {
-                      timeZone: "UTC",
-                    })}
+                    {target.startDate.toLocaleDateString(
+                      "tr-TR",
+                      {
+                        timeZone: "UTC",
+                      },
+                    )}
                     {" - "}
-                    {target.endDate.toLocaleDateString("tr-TR", {
-                      timeZone: "UTC",
-                    })}
+                    {target.endDate.toLocaleDateString(
+                      "tr-TR",
+                      {
+                        timeZone: "UTC",
+                      },
+                    )}
                   </p>
 
                   <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-800">
                     <div
-                      className="h-full rounded-full bg-emerald-500"
+                      className={`h-full rounded-full ${
+                        target.isActive
+                          ? "bg-emerald-500"
+                          : "bg-slate-600"
+                      }`}
                       style={{
                         width: `${Math.min(
-                          Math.max(target.realizationRate, 0),
+                          Math.max(
+                            target.realizationRate,
+                            0,
+                          ),
                           100,
                         )}%`,
                       }}
@@ -160,16 +233,28 @@ export default async function TargetsPage() {
 
                   <dl className="mt-5 grid grid-cols-2 gap-4 text-sm">
                     <div>
-                      <dt className="text-slate-400">Hedef</dt>
+                      <dt className="text-slate-400">
+                        Hedef
+                      </dt>
+
                       <dd className="mt-1 text-lg font-semibold">
-                        {target.targetQuantity.toLocaleString("tr-TR")} {unit}
+                        {target.targetQuantity.toLocaleString(
+                          "tr-TR",
+                        )}{" "}
+                        {unit}
                       </dd>
                     </div>
 
                     <div className="text-right">
-                      <dt className="text-slate-400">Gerçekleşen</dt>
+                      <dt className="text-slate-400">
+                        Gerçekleşen
+                      </dt>
+
                       <dd className="mt-1 text-lg font-semibold">
-                        {target.actualQuantity.toLocaleString("tr-TR")} {unit}
+                        {target.actualQuantity.toLocaleString(
+                          "tr-TR",
+                        )}{" "}
+                        {unit}
                       </dd>
                     </div>
                   </dl>
