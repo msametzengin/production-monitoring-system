@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import Link from "next/link";
 
 const downtimeTypeLabels = {
   PLANNED: "Planlı",
@@ -71,16 +72,34 @@ export default async function DowntimesPage() {
 
           <div className="mt-2 flex items-end justify-between gap-4">
             <div>
-              <h1 className="text-3xl font-bold">Duruş Kayıtları</h1>
+              <h1 className="text-3xl font-bold">
+                Üretim Duruşları
+              </h1>
 
               <p className="mt-2 text-slate-400">
                 Planlı ve plansız üretim duruşlarının takibi
               </p>
             </div>
 
-            <span className="rounded-full bg-slate-800 px-3 py-1 text-sm">
-              {downtimeRecords.length} kayıt
-            </span>
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="rounded-full bg-slate-800 px-3 py-1 text-sm">
+                {downtimeRecords.length} kayıt
+              </span>
+
+              <Link
+                href="/downtimes/reasons"
+                className="rounded-lg border border-slate-700 px-4 py-2.5 text-sm font-medium text-slate-200 transition hover:bg-slate-800"
+              >
+                Duruş nedenleri
+              </Link>
+
+              <Link
+                href="/downtimes/new"
+                className="rounded-lg bg-emerald-500 px-4 py-2.5 text-sm font-medium text-slate-950 transition hover:bg-emerald-400"
+              >
+                Yeni duruş
+              </Link>
+            </div>
           </div>
         </header>
 
@@ -123,6 +142,9 @@ export default async function DowntimesPage() {
                   <th className="px-4 py-3 text-right font-medium">Süre</th>
                   <th className="px-4 py-3 font-medium">Kaynak</th>
                   <th className="px-4 py-3 font-medium">Not</th>
+                  <th className="px-4 py-3 font-medium">
+                    İşlem
+                  </th>
                 </tr>
               </thead>
 
@@ -146,7 +168,7 @@ export default async function DowntimesPage() {
                     <td className="px-4 py-3 text-slate-400">
                       {
                         downtimeCategoryLabels[
-                          record.downtimeReason.category
+                        record.downtimeReason.category
                         ]
                       }
                     </td>
@@ -173,6 +195,14 @@ export default async function DowntimesPage() {
 
                     <td className="min-w-56 px-4 py-3 text-slate-400">
                       {record.notes ?? "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      <Link
+                        href={`/downtimes/${record.id}/edit`}
+                        className="font-medium text-blue-400 transition hover:text-blue-300"
+                      >
+                        Düzenle
+                      </Link>
                     </td>
                   </tr>
                 ))}
