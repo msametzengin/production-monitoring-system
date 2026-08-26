@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
+import { RecordStatusButton } from "./record-status-button";
 
 const measurementUnitLabels = {
   TON: "ton",
@@ -36,6 +37,13 @@ export default async function ProductionPage() {
     },
   });
 
+  const activeRecordCount = productionRecords.filter(
+    (record) => !record.archivedAt,
+  ).length;
+
+  const archivedRecordCount =
+    productionRecords.length - activeRecordCount;
+
   return (
     <main className="min-h-screen bg-slate-950 px-6 py-10">
       <div className="mx-auto max-w-7xl">
@@ -53,10 +61,18 @@ export default async function ProductionPage() {
               </p>
             </div>
 
-            <div className="flex items-center gap-3">
-              <span className="rounded-full bg-slate-800 px-3 py-1 text-sm">
-                {productionRecords.length} kayıt
-              </span>
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <div className="flex items-center gap-2">
+                <span className="rounded-full bg-emerald-500/15 px-3 py-1 text-sm text-emerald-400">
+                  {activeRecordCount} aktif
+                </span>
+
+                {archivedRecordCount > 0 && (
+                  <span className="rounded-full bg-slate-800 px-3 py-1 text-sm text-slate-400">
+                    {archivedRecordCount} arşiv
+                  </span>
+                )}
+              </div>
 
               <Link
                 href="/production/new"
@@ -88,6 +104,7 @@ export default async function ProductionPage() {
                   <th className="px-4 py-3 text-right font-medium">Oran</th>
                   <th className="px-4 py-3 font-medium">Kaynak</th>
                   <th className="px-4 py-3 font-medium">Not</th>
+                  <th className="px-4 py-3 font-medium">Durum</th>
                   <th className="px-4 py-3 font-medium">İşlem</th>
                 </tr>
               </thead>
@@ -104,7 +121,14 @@ export default async function ProductionPage() {
                       : 0;
 
                   return (
-                    <tr key={record.id} className="hover:bg-slate-900">
+                    <tr
+                      key={record.id}
+                      className={
+                        record.archivedAt
+                          ? "bg-slate-950/40 text-slate-500"
+                          : "hover:bg-slate-900"
+                      }
+                    >
                       <td className="whitespace-nowrap px-4 py-3">
                         {record.recordDate.toLocaleDateString("tr-TR", {
                           timeZone: "UTC",
@@ -148,12 +172,33 @@ export default async function ProductionPage() {
                         {record.notes ?? "—"}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3">
-                        <Link
-                          href={`/production/${record.id}/edit`}
-                          className="font-medium text-emerald-400 transition hover:text-emerald-300"
+                        <span
+                          className={
+                            record.archivedAt
+                              ? "rounded-full bg-slate-700/50 px-3 py-1 text-xs text-slate-400"
+                              : "rounded-full bg-emerald-500/15 px-3 py-1 text-xs text-emerald-400"
+                          }
                         >
-                          Düzenle
-                        </Link>
+                          {record.archivedAt ? "Arşivde" : "Aktif"}
+                        </span>
+                      </td>
+
+                      <td className="whitespace-nowrap px-4 py-3">
+                        <div className="flex items-center gap-4">
+                          {!record.archivedAt && (
+                            <Link
+                              href={`/production/${record.id}/edit`}
+                              className="font-medium text-emerald-400 transition hover:text-emerald-300"
+                            >
+                              Düzenle
+                            </Link>
+                          )}
+
+                          <RecordStatusButton
+                            recordId={record.id}
+                            isArchived={Boolean(record.archivedAt)}
+                          />
+                        </div>
                       </td>
                     </tr>
                   );

@@ -103,13 +103,17 @@ export async function createProductionRecord(
   });
 
   if (existingRecord) {
+    const recordMessage = existingRecord.archivedAt
+      ? "Bu tarih, tesis–ürün ve vardiya için arşivlenmiş bir kayıt bulunuyor. Yeni kayıt oluşturmak yerine arşivdeki kaydı geri almalısınız."
+      : "Bu tarih, tesis–ürün ve vardiya için zaten bir üretim kaydı bulunuyor.";
+
     return {
       errors: {
-        recordDate: [
-          "Bu tarih, tesis–ürün ve vardiya için zaten bir üretim kaydı bulunuyor.",
-        ],
+        recordDate: [recordMessage],
       },
-      message: "Aynı üretim kaydı ikinci kez oluşturulamaz.",
+      message: existingRecord.archivedAt
+        ? "Aynı üretim kaydının arşivlenmiş sürümü bulunuyor."
+        : "Aynı üretim kaydı ikinci kez oluşturulamaz.",
     };
   }
 
@@ -175,6 +179,12 @@ export async function updateProductionRecord(
   if (!currentRecord) {
     return {
       message: "Düzenlenmek istenen üretim kaydı bulunamadı.",
+    };
+  }
+  if (currentRecord.archivedAt) {
+    return {
+      message:
+        "Arşivlenmiş üretim kaydı düzenlenemez. Önce kaydı geri almalısınız.",
     };
   }
 
@@ -284,4 +294,74 @@ export async function updateProductionRecord(
   revalidatePath("/production");
 
   redirect("/production");
+}
+
+export async function archiveProductionRecord(
+  formData: FormData,
+): Promise<void> {
+  const recordId = Number(formData.get("recordId"));
+
+  if (!Number.isInteger(recordId) || recordId <= 0) {
+    return;
+  }
+
+  const productionRecord =
+    await prisma.productionRecord.findUnique({
+      where: {
+        id: recordId,
+      },
+    });
+
+  if (!productionRecord || productionRecord.archivedAt) {
+    return;
+  }
+
+  await prisma.productionRecord.update({
+    where: {
+      id: recordId,
+    },
+    data: {
+      archivedAt: new Date(),
+    },
+  });
+
+  revalidatePath("/");
+  revalidatePath("/production");
+  revalidatePath("/products");
+  revalidatePath("/targets");
+}
+
+export async function restoreProductionRecord(
+  formData: FormData,
+): Promise<void> {
+  const recordId = Number(formData.get("recordId"));
+
+  if (!Number.isInteger(recordId) || recordId <= 0) {
+    return;
+  }
+
+  const productionRecord =
+    await prisma.productionRecord.findUnique({
+      where: {
+        id: recordId,
+      },
+    });
+
+  if (!productionRecord || !productionRecord.archivedAt) {
+    return;
+  }
+
+  await prisma.productionRecord.update({
+    where: {
+      id: recordId,
+    },
+    data: {
+      archivedAt: null,
+    },
+  });
+
+  revalidatePath("/");
+  revalidatePath("/production");
+  revalidatePath("/products");
+  revalidatePath("/targets");
 }

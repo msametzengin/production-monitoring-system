@@ -38,6 +38,7 @@ export default async function TargetsPage() {
     productionTargets.map(async (target) => {
       const productionSummary = await prisma.productionRecord.aggregate({
         where: {
+          archivedAt: null,
           facilityProductId: target.facilityProductId,
           recordDate: {
             gte: target.startDate,
@@ -98,7 +99,7 @@ export default async function TargetsPage() {
             {targetSummaries.map((target) => {
               const unit =
                 measurementUnitLabels[
-                  target.facilityProduct.product.measurementUnit
+                target.facilityProduct.product.measurementUnit
                 ];
 
               return (

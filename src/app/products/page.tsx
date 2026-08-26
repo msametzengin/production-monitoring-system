@@ -23,7 +23,11 @@ export default async function ProductsPage() {
           facility: true,
           _count: {
             select: {
-              productionRecords: true,
+              productionRecords: {
+                where: {
+                  archivedAt: null,
+                },
+              },
               productionTargets: true,
             },
           },
@@ -166,8 +170,8 @@ export default async function ProductsPage() {
                               <p className="mt-1 font-semibold">
                                 {facilityProduct.nominalDailyCapacity !== null
                                   ? Number(
-                                      facilityProduct.nominalDailyCapacity,
-                                    ).toLocaleString("tr-TR")
+                                    facilityProduct.nominalDailyCapacity,
+                                  ).toLocaleString("tr-TR")
                                   : "—"}{" "}
                                 {measurementUnitLabels[product.measurementUnit]}
                                 /gün

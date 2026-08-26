@@ -34,7 +34,7 @@ export default async function EditProductionRecordPage({
     },
   });
 
-  if (!productionRecord) {
+  if (!productionRecord || productionRecord.archivedAt) {
     notFound();
   }
 
@@ -77,7 +77,7 @@ export default async function EditProductionRecordPage({
       productName: facilityProduct.product.name,
       unitLabel:
         measurementUnitLabels[
-          facilityProduct.product.measurementUnit
+        facilityProduct.product.measurementUnit
         ],
     }));
 

@@ -27,6 +27,9 @@ export default async function Home() {
   });
 
   const productionRecords = await prisma.productionRecord.findMany({
+    where: {
+      archivedAt: null,
+    },
     take: 10,
     orderBy: [
       {
@@ -69,6 +72,7 @@ export default async function Home() {
     productionTargets.map(async (target) => {
       const productionSummary = await prisma.productionRecord.aggregate({
         where: {
+          archivedAt: null,
           facilityProductId: target.facilityProductId,
           recordDate: {
             gte: target.startDate,

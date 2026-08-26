@@ -133,6 +133,7 @@ model ProductionRecord {
   operatingMinutes  Int
   source            RecordSource @default(MANUAL)
   notes             String?      @db.Text
+  archivedAt        DateTime?
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
 
@@ -142,6 +143,7 @@ model ProductionRecord {
   @@unique([recordDate, facilityProductId, shiftId])
   @@index([facilityProductId, recordDate])
   @@index([shiftId, recordDate])
+  @@index([archivedAt, recordDate])
   @@map("production_records")
 }
 
