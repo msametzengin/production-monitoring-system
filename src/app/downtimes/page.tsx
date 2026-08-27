@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { RecordFilters } from "@/components/record-filters";
+import { ExcelExportLink } from "@/components/excel-export-link";
 import { parseDowntimeFilters } from "@/lib/queries/downtimes";
 import type { FilterSearchParams } from "@/lib/filters";
 
@@ -122,7 +123,11 @@ export default async function DowntimesPage({
               <span className="rounded-full bg-slate-800 px-3 py-1 text-sm">
                 {downtimeRecords.length} kayıt
               </span>
-
+              <ExcelExportLink
+                resource="downtimes"
+                values={values}
+                disabled={Boolean(error)}
+              />
               <Link
                 href="/downtimes/reasons"
                 className="rounded-lg border border-slate-700 px-4 py-2.5 text-sm font-medium text-slate-200 transition hover:bg-slate-800"

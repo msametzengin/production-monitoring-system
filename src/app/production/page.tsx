@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { RecordStatusButton } from "./record-status-button";
 import { RecordFilters } from "@/components/record-filters";
+import { ExcelExportLink } from "@/components/excel-export-link";
 import { parseProductionFilters } from "@/lib/queries/production";
 import type { FilterSearchParams } from "@/lib/filters";
 
@@ -129,7 +130,11 @@ export default async function ProductionPage({
                   </span>
                 )}
               </div>
-
+              <ExcelExportLink
+                resource="production"
+                values={values}
+                disabled={Boolean(error)}
+              />
               <Link
                 href="/production/new"
                 className="rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950 transition hover:bg-emerald-400"

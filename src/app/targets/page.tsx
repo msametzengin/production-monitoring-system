@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { RecordFilters } from "@/components/record-filters";
+import { ExcelExportLink } from "@/components/excel-export-link";
 import { parseTargetFilters } from "@/lib/queries/targets";
 import type { FilterSearchParams } from "@/lib/filters";
 
@@ -141,7 +142,11 @@ export default async function TargetsPage({
                 {activeTargetCount} aktif /{" "}
                 {targetSummaries.length} toplam
               </span>
-
+              <ExcelExportLink
+                resource="targets"
+                values={values}
+                disabled={Boolean(error)}
+              />
               <Link
                 href="/targets/new"
                 className="rounded-lg bg-emerald-500 px-4 py-2.5 text-sm font-medium text-slate-950 transition hover:bg-emerald-400"
