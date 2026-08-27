@@ -1,4 +1,7 @@
 import { prisma } from "@/lib/prisma";
+import { RecordFilters } from "@/components/record-filters";
+import { parseDashboardFilters } from "@/lib/queries/dashboard";
+import type { FilterSearchParams } from "@/lib/filters";
 
 const measurementUnitLabels = {
   TON: "ton",
@@ -9,68 +12,173 @@ const measurementUnitLabels = {
 
 export const dynamic = "force-dynamic";
 
-export default async function Home() {
-  const facilities = await prisma.facility.findMany({
-    include: {
-      products: {
-        where: {
-          isActive: true,
-        },
-        include: {
-          product: true,
-        },
-      },
-    },
-    orderBy: {
-      name: "asc",
-    },
-  });
+type DashboardPageProps = {
+  searchParams: Promise<FilterSearchParams>;
+};
 
-  const productionRecords = await prisma.productionRecord.findMany({
-    where: {
-      archivedAt: null,
-    },
-    take: 10,
-    orderBy: [
-      {
-        recordDate: "desc",
-      },
-      {
-        createdAt: "desc",
-      },
-    ],
-    include: {
-      shift: true,
-      facilityProduct: {
-        include: {
-          facility: true,
-          product: true,
-        },
-      },
-    },
-  });
+export default async function Home({
+  searchParams,
+}: DashboardPageProps) {
+  const filters = parseDashboardFilters(await searchParams);
 
-  const productionTargets = await prisma.productionTarget.findMany({
-    where: {
-      isActive: true,
-    },
-    take: 10,
-    orderBy: {
-      startDate: "desc",
-    },
-    include: {
-      facilityProduct: {
-        include: {
-          facility: true,
-          product: true,
-        },
+  const [
+    facilities,
+    facilityOptions,
+    productOptions,
+    productionRecords,
+    productionSummary,
+    productionTargets,
+    downtimeGroups,
+  ] = await Promise.all([
+    filters.facilityWhere === null
+      ? Promise.resolve([])
+      : prisma.facility.findMany({
+          where: filters.facilityWhere,
+          include: {
+            products: {
+              where: {
+                isActive: true,
+                product: {
+                  isActive: true,
+                },
+                ...(filters.values.productId
+                  ? {
+                      productId: Number(
+                        filters.values.productId,
+                      ),
+                    }
+                  : {}),
+              },
+              include: {
+                product: true,
+              },
+            },
+          },
+          orderBy: {
+            name: "asc",
+          },
+        }),
+
+    prisma.facility.findMany({
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        isActive: true,
       },
+      orderBy: {
+        name: "asc",
+      },
+    }),
+
+    prisma.product.findMany({
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        isActive: true,
+      },
+      orderBy: {
+        name: "asc",
+      },
+    }),
+
+    filters.productionWhere === null
+      ? Promise.resolve([])
+      : prisma.productionRecord.findMany({
+          where: filters.productionWhere,
+          take: 10,
+          orderBy: [
+            { recordDate: "desc" },
+            { createdAt: "desc" },
+            { id: "desc" },
+          ],
+          include: {
+            shift: true,
+            facilityProduct: {
+              include: {
+                facility: true,
+                product: true,
+              },
+            },
+          },
+        }),
+
+    // Bu sorguda take yok: tüm eşleşen kayıtları toplar.
+    filters.productionWhere === null
+      ? Promise.resolve(null)
+      : prisma.productionRecord.aggregate({
+          where: filters.productionWhere,
+          _count: {
+            _all: true,
+          },
+          _sum: {
+            operatingMinutes: true,
+          },
+        }),
+
+    filters.targetWhere === null
+      ? Promise.resolve([])
+      : prisma.productionTarget.findMany({
+          where: filters.targetWhere,
+          take: 10,
+          orderBy: [
+            { startDate: "desc" },
+            { id: "desc" },
+          ],
+          include: {
+            facilityProduct: {
+              include: {
+                facility: true,
+                product: true,
+              },
+            },
+          },
+        }),
+
+    filters.downtimeWhere === null
+      ? Promise.resolve([])
+      : prisma.downtimeRecord.groupBy({
+          by: ["type"],
+          where: filters.downtimeWhere,
+          _sum: {
+            durationMinutes: true,
+          },
+        }),
+  ]);
+
+  const totalProductionCount =
+    productionSummary?._count._all ?? 0;
+
+  const totalOperatingMinutes =
+    productionSummary?._sum.operatingMinutes ?? 0;
+
+  const downtimeSummary = downtimeGroups.reduce(
+    (summary, group) => {
+      const minutes = group._sum.durationMinutes ?? 0;
+
+      summary.total += minutes;
+
+      if (group.type === "PLANNED") {
+        summary.planned += minutes;
+      } else {
+        summary.unplanned += minutes;
+      }
+
+      return summary;
     },
-  });
+    {
+      total: 0,
+      planned: 0,
+      unplanned: 0,
+    },
+  );
 
   const targetSummaries = await Promise.all(
     productionTargets.map(async (target) => {
-      const productionSummary = await prisma.productionRecord.aggregate({
+      // Dashboard tarihleri hedefleri seçer.
+      // Gerçekleşen miktar hedefin tam döneminden hesaplanır.
+      const production = await prisma.productionRecord.aggregate({
         where: {
           archivedAt: null,
           facilityProductId: target.facilityProductId,
@@ -84,12 +192,17 @@ export default async function Home() {
         },
       });
 
-      const actualQuantity = Number(productionSummary._sum.quantity ?? 0);
+      const actualQuantity = Number(
+        production._sum.quantity ?? 0,
+      );
+
       const targetQuantity = Number(target.targetQuantity);
 
       const realizationRate =
         targetQuantity > 0
-          ? Math.round((actualQuantity / targetQuantity) * 1000) / 10
+          ? Math.round(
+              (actualQuantity / targetQuantity) * 1000,
+            ) / 10
           : 0;
 
       return {
@@ -99,40 +212,6 @@ export default async function Home() {
         realizationRate,
       };
     }),
-  );
-
-  const downtimeRecords = await prisma.downtimeRecord.findMany({
-    orderBy: {
-      startedAt: "desc",
-    },
-    include: {
-      facility: true,
-      downtimeReason: true,
-    },
-  });
-
-  const downtimeSummary = downtimeRecords.reduce(
-    (summary, record) => {
-      summary.total += record.durationMinutes;
-
-      if (record.type === "PLANNED") {
-        summary.planned += record.durationMinutes;
-      } else {
-        summary.unplanned += record.durationMinutes;
-      }
-
-      return summary;
-    },
-    {
-      total: 0,
-      planned: 0,
-      unplanned: 0,
-    },
-  );
-
-  const totalOperatingMinutes = productionRecords.reduce(
-    (total, record) => total + record.operatingMinutes,
-    0,
   );
 
   return (
@@ -148,15 +227,92 @@ export default async function Home() {
           </h1>
 
           <p className="mt-3 text-slate-400">
-            MySQL veritabanında kayıtlı tesisler
+            Tesis, ürün ve tarihe göre üretim özeti
           </p>
         </header>
+                <RecordFilters
+          action="/"
+          values={filters.values}
+          error={filters.error}
+          fields={[
+            {
+              name: "facilityId",
+              label: "Tesis",
+              type: "select",
+              options: [
+                {
+                  value: "",
+                  label: "Tüm tesisler",
+                },
+                ...facilityOptions.map((facility) => ({
+                  value: String(facility.id),
+                  label: `${facility.code} · ${facility.name}${
+                    facility.isActive ? "" : " (pasif)"
+                  }`,
+                })),
+              ],
+            },
+            {
+              name: "productId",
+              label: "Ürün",
+              type: "select",
+              options: [
+                {
+                  value: "",
+                  label: "Tüm ürünler",
+                },
+                ...productOptions.map((product) => ({
+                  value: String(product.id),
+                  label: `${product.code} · ${product.name}${
+                    product.isActive ? "" : " (pasif)"
+                  }`,
+                })),
+              ],
+            },
+            {
+              name: "startDate",
+              label: "Başlangıç tarihi",
+              type: "date",
+            },
+            {
+              name: "endDate",
+              label: "Bitiş tarihi",
+              type: "date",
+            },
+          ]}
+        />
+
+        <div className="mb-8 space-y-2 text-xs leading-5 text-slate-400">
+          <p>
+            Çalışma toplamı, filtreye uyan tüm arşivlenmemiş
+            üretim kayıtlarının sürelerini toplar. Farklı ürünlerin
+            süreleri örtüşebilir; bu değer tesisin kesintisiz
+            çalışma süresi değildir.
+          </p>
+          <p>
+            Duruşlar tesis ve başlangıç gününe göre filtrelenir;
+            kayıtların tam süreleri toplanır. Ürün seçimi duruş
+            özetini değiştirmez.
+          </p>
+          <p>
+            Tarih aralığıyla kesişen en güncel 10 aktif hedef
+            gösterilir. Karşılaştırmalar hedeflerin kendi tam
+            dönemlerine aittir. Tesis kartları tarih filtresinden
+            etkilenmez.
+          </p>
+        </div>
+        {filters.error ? (
+          <p className="rounded-xl border border-slate-800 p-6 text-slate-400">
+            Özetleri görmek için filtre hatasını düzeltin.
+          </p>
+        ) : (
+          <>
         <section className="mb-10">
           <h2 className="mb-4 text-xl font-semibold">Üretim Özeti</h2>
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <article className="rounded-xl border border-slate-800 bg-slate-900 p-5">
-              <p className="text-sm text-slate-400">Çalışma süresi</p>
+              <p className="text-sm text-slate-400">Kayıt çalışma toplamı</p>
               <p className="mt-2 text-2xl font-bold text-emerald-400">
                 {totalOperatingMinutes} dk
               </p>
@@ -191,7 +347,7 @@ export default async function Home() {
 
             {targetSummaries.length === 0 ? (
               <div className="rounded-xl border border-slate-800 p-8 text-slate-400">
-                Henüz üretim hedefi bulunmuyor.
+                Filtrelere uygun aktif üretim hedefi bulunmuyor.
               </div>
             ) : (
               <div className="grid gap-4 md:grid-cols-2">
@@ -290,7 +446,7 @@ export default async function Home() {
 
           {facilities.length === 0 ? (
             <div className="rounded-xl border border-slate-800 p-8 text-slate-400">
-              Henüz tesis kaydı bulunmuyor.
+              Tesis ve ürün seçimine uygun tesis bulunmuyor.
             </div>
           ) : (
             <div className="grid gap-4 md:grid-cols-2">
@@ -381,13 +537,13 @@ export default async function Home() {
             <h2 className="text-xl font-semibold">Son Üretim Kayıtları</h2>
 
             <span className="rounded-full bg-slate-800 px-3 py-1 text-sm">
-              {productionRecords.length} kayıt
+              {productionRecords.length} gösterilen / {totalProductionCount} kayıt
             </span>
           </div>
 
           {productionRecords.length === 0 ? (
             <div className="rounded-xl border border-slate-800 p-8 text-slate-400">
-              Henüz üretim kaydı bulunmuyor.
+              Filtrelere uygun üretim kaydı bulunmuyor.
             </div>
           ) : (
             <div className="overflow-x-auto rounded-xl border border-slate-800">
@@ -457,6 +613,8 @@ export default async function Home() {
             </div>
           )}
         </section>
+          </>
+        )}
       </div>
     </main>
   );
