@@ -1,5 +1,8 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { RecordFilters } from "@/components/record-filters";
+import { parseTargetFilters } from "@/lib/queries/targets";
+import type { FilterSearchParams } from "@/lib/filters";
 
 const measurementUnitLabels = {
   TON: "ton",
@@ -17,21 +20,55 @@ const periodLabels = {
 
 export const dynamic = "force-dynamic";
 
-export default async function TargetsPage() {
-  const productionTargets =
-    await prisma.productionTarget.findMany({
-      orderBy: {
-        startDate: "desc",
-      },
-      include: {
-        facilityProduct: {
+export default async function TargetsPage({
+  searchParams,
+}: {
+  searchParams: Promise<FilterSearchParams>;
+}) {
+  const { values, where, error } = parseTargetFilters(
+    await searchParams,
+  );
+
+  const [productionTargets, facilities, products] =
+    await Promise.all([
+      where === null
+        ? Promise.resolve([])
+        : prisma.productionTarget.findMany({
+          where,
+          orderBy: [
+            { startDate: "desc" },
+            { id: "desc" },
+          ],
           include: {
-            facility: true,
-            product: true,
+            facilityProduct: {
+              include: {
+                facility: true,
+                product: true,
+              },
+            },
           },
+        }),
+
+      prisma.facility.findMany({
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          isActive: true,
         },
-      },
-    });
+        orderBy: { name: "asc" },
+      }),
+
+      prisma.product.findMany({
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          isActive: true,
+        },
+        orderBy: { name: "asc" },
+      }),
+    ]);
 
   const targetSummaries = await Promise.all(
     productionTargets.map(async (target) => {
@@ -62,8 +99,8 @@ export default async function TargetsPage() {
       const realizationRate =
         targetQuantity > 0
           ? Math.round(
-              (actualQuantity / targetQuantity) * 1000,
-            ) / 10
+            (actualQuantity / targetQuantity) * 1000,
+          ) / 10
           : 0;
 
       return {
@@ -114,28 +151,106 @@ export default async function TargetsPage() {
             </div>
           </div>
         </header>
+        <RecordFilters
+          action="/targets"
+          values={values}
+          error={error}
+          fields={[
+            {
+              name: "q",
+              label: "Arama",
+              type: "text",
+              placeholder: "Tesis, ürün, kod veya not",
+            },
+            {
+              name: "facilityId",
+              label: "Tesis",
+              type: "select",
+              options: [
+                { value: "", label: "Tüm tesisler" },
+                ...facilities.map((facility) => ({
+                  value: facility.id.toString(),
+                  label: `${facility.code} · ${facility.name}${facility.isActive ? "" : " (pasif)"
+                    }`,
+                })),
+              ],
+            },
+            {
+              name: "productId",
+              label: "Ürün",
+              type: "select",
+              options: [
+                { value: "", label: "Tüm ürünler" },
+                ...products.map((product) => ({
+                  value: product.id.toString(),
+                  label: `${product.code} · ${product.name}${product.isActive ? "" : " (pasif)"
+                    }`,
+                })),
+              ],
+            },
+            {
+              name: "period",
+              label: "Hedef dönemi",
+              type: "select",
+              options: [
+                { value: "all", label: "Tüm dönemler" },
+                { value: "DAILY", label: "Günlük" },
+                { value: "WEEKLY", label: "Haftalık" },
+                { value: "MONTHLY", label: "Aylık" },
+                { value: "CUSTOM", label: "Özel dönem" },
+              ],
+            },
+            {
+              name: "startDate",
+              label: "Aralık başlangıcı",
+              type: "date",
+            },
+            {
+              name: "endDate",
+              label: "Aralık bitişi",
+              type: "date",
+            },
+            {
+              name: "status",
+              label: "Hedef durumu",
+              type: "select",
+              options: [
+                { value: "all", label: "Tüm hedefler" },
+                { value: "active", label: "Aktif hedefler" },
+                { value: "inactive", label: "Pasif hedefler" },
+              ],
+            },
+          ]}
+        />
+
+        <p className="mb-6 text-sm text-slate-400">
+          Seçilen tarih aralığıyla kesişen hedefler gösterilir.
+          Hedef ve gerçekleşen miktarlar, her hedefin kendi tam
+          dönemine aittir.
+        </p>
 
         {targetSummaries.length === 0 ? (
           <div className="rounded-xl border border-slate-800 p-8 text-slate-400">
-            Henüz üretim hedefi bulunmuyor.
+            {error
+              ? "Sonuçları görmek için filtre hatasını düzeltin."
+              : "Seçilen filtrelere uygun üretim hedefi bulunamadı."}
           </div>
         ) : (
           <div className="grid gap-4 lg:grid-cols-2">
             {targetSummaries.map((target) => {
               const unit =
                 measurementUnitLabels[
-                  target.facilityProduct.product
-                    .measurementUnit
+                target.facilityProduct.product
+                  .measurementUnit
                 ];
 
               return (
                 <article
                   key={target.id}
-                  className={`rounded-xl border bg-slate-900 p-6 ${
-                    target.isActive
+                  className={`rounded-xl border bg-slate-900 p-6 ${target.isActive
                       ? "border-slate-800"
                       : "border-slate-800 opacity-70"
-                  }`}
+                    }`}
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div>
@@ -214,11 +329,10 @@ export default async function TargetsPage() {
 
                   <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-800">
                     <div
-                      className={`h-full rounded-full ${
-                        target.isActive
+                      className={`h-full rounded-full ${target.isActive
                           ? "bg-emerald-500"
                           : "bg-slate-600"
-                      }`}
+                        }`}
                       style={{
                         width: `${Math.min(
                           Math.max(

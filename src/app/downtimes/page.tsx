@@ -1,5 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
+import { RecordFilters } from "@/components/record-filters";
+import { parseDowntimeFilters } from "@/lib/queries/downtimes";
+import type { FilterSearchParams } from "@/lib/filters";
 
 const downtimeTypeLabels = {
   PLANNED: "Planlı",
@@ -32,17 +35,51 @@ function formatDateTime(date: Date) {
 
 export const dynamic = "force-dynamic";
 
-export default async function DowntimesPage() {
-  const downtimeRecords = await prisma.downtimeRecord.findMany({
-    orderBy: {
-      startedAt: "desc",
-    },
-    include: {
-      facility: true,
-      downtimeReason: true,
-    },
-  });
+export default async function DowntimesPage({
+  searchParams,
+}: {
+  searchParams: Promise<FilterSearchParams>;
+}) {
+  const { values, where, error } = parseDowntimeFilters(
+    await searchParams,
+  );
 
+  const [downtimeRecords, facilities, reasons] =
+    await Promise.all([
+      where === null
+        ? Promise.resolve([])
+        : prisma.downtimeRecord.findMany({
+          where,
+          orderBy: [
+            { startedAt: "desc" },
+            { id: "desc" },
+          ],
+          include: {
+            facility: true,
+            downtimeReason: true,
+          },
+        }),
+
+      prisma.facility.findMany({
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          isActive: true,
+        },
+        orderBy: { name: "asc" },
+      }),
+
+      prisma.downtimeReason.findMany({
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          isActive: true,
+        },
+        orderBy: { name: "asc" },
+      }),
+    ]);
   const summary = downtimeRecords.reduce(
     (result, record) => {
       result.total += record.durationMinutes;
@@ -102,6 +139,94 @@ export default async function DowntimesPage() {
             </div>
           </div>
         </header>
+        <RecordFilters
+          action="/downtimes"
+          values={values}
+          error={error}
+          fields={[
+            {
+              name: "q",
+              label: "Arama",
+              type: "text",
+              placeholder: "Tesis, neden, kod veya not",
+            },
+            {
+              name: "facilityId",
+              label: "Tesis",
+              type: "select",
+              options: [
+                { value: "", label: "Tüm tesisler" },
+                ...facilities.map((facility) => ({
+                  value: facility.id.toString(),
+                  label: `${facility.code} · ${facility.name}${facility.isActive ? "" : " (pasif)"
+                    }`,
+                })),
+              ],
+            },
+            {
+              name: "reasonId",
+              label: "Duruş nedeni",
+              type: "select",
+              options: [
+                { value: "", label: "Tüm nedenler" },
+                ...reasons.map((reason) => ({
+                  value: reason.id.toString(),
+                  label: `${reason.code} · ${reason.name}${reason.isActive ? "" : " (pasif)"
+                    }`,
+                })),
+              ],
+            },
+            {
+              name: "type",
+              label: "Duruş türü",
+              type: "select",
+              options: [
+                { value: "all", label: "Tüm türler" },
+                { value: "PLANNED", label: "Planlı" },
+                { value: "UNPLANNED", label: "Plansız" },
+              ],
+            },
+            {
+              name: "category",
+              label: "Kategori",
+              type: "select",
+              options: [
+                { value: "all", label: "Tüm kategoriler" },
+                ...Object.entries(downtimeCategoryLabels).map(
+                  ([value, label]) => ({
+                    value,
+                    label,
+                  }),
+                ),
+              ],
+            },
+            {
+              name: "startDate",
+              label: "Başlangıç günü: en erken",
+              type: "date",
+            },
+            {
+              name: "endDate",
+              label: "Başlangıç günü: en geç",
+              type: "date",
+            },
+            {
+              name: "source",
+              label: "Kayıt kaynağı",
+              type: "select",
+              options: [
+                { value: "all", label: "Tüm kaynaklar" },
+                { value: "MANUAL", label: "Manuel" },
+                { value: "EXCEL_IMPORT", label: "Excel" },
+              ],
+            },
+          ]}
+        />
+
+        <p className="mb-6 text-sm text-slate-400">
+          Tarihler duruşun başlangıç gününü filtreler.
+          Özet kartları listelenen kayıtların tam sürelerini toplar.
+        </p>
 
         <section className="mb-8 grid gap-4 sm:grid-cols-3">
           <article className="rounded-xl border border-slate-800 bg-slate-900 p-5">
@@ -126,7 +251,9 @@ export default async function DowntimesPage() {
 
         {downtimeRecords.length === 0 ? (
           <div className="rounded-xl border border-slate-800 p-8 text-slate-400">
-            Henüz duruş kaydı bulunmuyor.
+            {error
+              ? "Sonuçları görmek için filtre hatasını düzeltin."
+              : "Seçilen filtrelere uygun duruş kaydı bulunamadı."}
           </div>
         ) : (
           <div className="overflow-x-auto rounded-xl border border-slate-800">

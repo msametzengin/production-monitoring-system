@@ -1,6 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { RecordStatusButton } from "./record-status-button";
+import { RecordFilters } from "@/components/record-filters";
+import { parseProductionFilters } from "@/lib/queries/production";
+import type { FilterSearchParams } from "@/lib/filters";
 
 const measurementUnitLabels = {
   TON: "ton",
@@ -16,26 +19,79 @@ const sourceLabels = {
 
 export const dynamic = "force-dynamic";
 
-export default async function ProductionPage() {
-  const productionRecords = await prisma.productionRecord.findMany({
-    orderBy: [
-      {
-        recordDate: "desc",
-      },
-      {
-        createdAt: "desc",
-      },
-    ],
-    include: {
-      shift: true,
-      facilityProduct: {
-        include: {
-          facility: true,
-          product: true,
+export default async function ProductionPage({
+  searchParams,
+}: {
+  searchParams: Promise<FilterSearchParams>;
+}) {
+  const { values, where, error } = parseProductionFilters(
+    await searchParams,
+  );
+
+  const [productionRecords, facilities, products, shifts] =
+    await Promise.all([
+      where === null
+        ? Promise.resolve([])
+        : prisma.productionRecord.findMany({
+          where,
+          orderBy: [
+            {
+              recordDate: "desc",
+            },
+            {
+              createdAt: "desc",
+            },
+            {
+              id: "desc",
+            },
+          ],
+          include: {
+            shift: true,
+            facilityProduct: {
+              include: {
+                facility: true,
+                product: true,
+              },
+            },
+          },
+        }),
+
+      prisma.facility.findMany({
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          isActive: true,
         },
-      },
-    },
-  });
+        orderBy: {
+          name: "asc",
+        },
+      }),
+
+      prisma.product.findMany({
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          isActive: true,
+        },
+        orderBy: {
+          name: "asc",
+        },
+      }),
+
+      prisma.shift.findMany({
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          isActive: true,
+        },
+        orderBy: {
+          sortOrder: "asc",
+        },
+      }),
+    ]);
 
   const activeRecordCount = productionRecords.filter(
     (record) => !record.archivedAt,
@@ -83,10 +139,121 @@ export default async function ProductionPage() {
             </div>
           </div>
         </header>
+        <RecordFilters
+          action="/production"
+          values={values}
+          error={error}
+          fields={[
+            {
+              name: "q",
+              label: "Arama",
+              type: "text",
+              placeholder: "Tesis, ürün, kod veya not",
+            },
+            {
+              name: "facilityId",
+              label: "Tesis",
+              type: "select",
+              options: [
+                {
+                  value: "",
+                  label: "Tüm tesisler",
+                },
+                ...facilities.map((facility) => ({
+                  value: facility.id.toString(),
+                  label: `${facility.code} · ${facility.name}${facility.isActive ? "" : " (pasif)"
+                    }`,
+                })),
+              ],
+            },
+            {
+              name: "productId",
+              label: "Ürün",
+              type: "select",
+              options: [
+                {
+                  value: "",
+                  label: "Tüm ürünler",
+                },
+                ...products.map((product) => ({
+                  value: product.id.toString(),
+                  label: `${product.code} · ${product.name}${product.isActive ? "" : " (pasif)"
+                    }`,
+                })),
+              ],
+            },
+            {
+              name: "shiftId",
+              label: "Vardiya",
+              type: "select",
+              options: [
+                {
+                  value: "",
+                  label: "Tüm vardiyalar",
+                },
+                ...shifts.map((shift) => ({
+                  value: shift.id.toString(),
+                  label: `${shift.code} · ${shift.name}${shift.isActive ? "" : " (pasif)"
+                    }`,
+                })),
+              ],
+            },
+            {
+              name: "startDate",
+              label: "Başlangıç tarihi",
+              type: "date",
+            },
+            {
+              name: "endDate",
+              label: "Bitiş tarihi",
+              type: "date",
+            },
+            {
+              name: "status",
+              label: "Kayıt durumu",
+              type: "select",
+              options: [
+                {
+                  value: "all",
+                  label: "Tüm kayıtlar",
+                },
+                {
+                  value: "active",
+                  label: "Aktif kayıtlar",
+                },
+                {
+                  value: "archived",
+                  label: "Arşivdeki kayıtlar",
+                },
+              ],
+            },
+            {
+              name: "source",
+              label: "Kayıt kaynağı",
+              type: "select",
+              options: [
+                {
+                  value: "all",
+                  label: "Tüm kaynaklar",
+                },
+                {
+                  value: "MANUAL",
+                  label: "Manuel",
+                },
+                {
+                  value: "EXCEL_IMPORT",
+                  label: "Excel",
+                },
+              ],
+            },
+          ]}
+        />
 
         {productionRecords.length === 0 ? (
           <div className="rounded-xl border border-slate-800 p-8 text-slate-400">
-            Henüz üretim kaydı bulunmuyor.
+            {error
+              ? "Sonuçları görmek için filtre hatasını düzeltin."
+              : "Seçilen filtrelere uygun üretim kaydı bulunamadı."}
           </div>
         ) : (
           <div className="overflow-x-auto rounded-xl border border-slate-800">

@@ -12,7 +12,24 @@ function createPrismaClient() {
     throw new Error("DATABASE_URL ortam değişkeni tanımlı değil.");
   }
 
-  const adapter = new PrismaMariaDb(databaseUrl);
+  const connectionUrl = new URL(databaseUrl);
+
+  const isLocalDevelopment =
+    process.env.NODE_ENV === "development" &&
+    ["localhost", "127.0.0.1", "[::1]"].includes(
+      connectionUrl.hostname,
+    );
+
+  if (isLocalDevelopment) {
+    connectionUrl.searchParams.set(
+      "allowPublicKeyRetrieval",
+      "true",
+    );
+  }
+
+  const adapter = new PrismaMariaDb(
+    connectionUrl.toString(),
+  );
 
   return new PrismaClient({ adapter });
 }
