@@ -123,6 +123,12 @@ export default async function DowntimesPage({
               <span className="rounded-full bg-slate-800 px-3 py-1 text-sm">
                 {downtimeRecords.length} kayıt
               </span>
+              <Link
+                href="/downtimes/import"
+                className="rounded-lg border border-sky-500/50 px-4 py-2 text-sm font-medium text-sky-400 transition hover:bg-sky-500/10"
+              >
+                Excel’den içe aktar
+              </Link>
               <ExcelExportLink
                 resource="downtimes"
                 values={values}

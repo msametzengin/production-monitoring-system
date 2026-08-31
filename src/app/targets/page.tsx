@@ -142,6 +142,12 @@ export default async function TargetsPage({
                 {activeTargetCount} aktif /{" "}
                 {targetSummaries.length} toplam
               </span>
+              <Link
+                href="/targets/import"
+                className="rounded-lg border border-sky-500/50 px-4 py-2 text-sm font-medium text-sky-400 transition hover:bg-sky-500/10"
+              >
+                Excel’den içe aktar
+              </Link>
               <ExcelExportLink
                 resource="targets"
                 values={values}
@@ -253,8 +259,8 @@ export default async function TargetsPage({
                 <article
                   key={target.id}
                   className={`rounded-xl border bg-slate-900 p-6 ${target.isActive
-                      ? "border-slate-800"
-                      : "border-slate-800 opacity-70"
+                    ? "border-slate-800"
+                    : "border-slate-800 opacity-70"
                     }`}
                 >
                   <div className="flex items-start justify-between gap-4">
@@ -335,8 +341,8 @@ export default async function TargetsPage({
                   <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-800">
                     <div
                       className={`h-full rounded-full ${target.isActive
-                          ? "bg-emerald-500"
-                          : "bg-slate-600"
+                        ? "bg-emerald-500"
+                        : "bg-slate-600"
                         }`}
                       style={{
                         width: `${Math.min(
