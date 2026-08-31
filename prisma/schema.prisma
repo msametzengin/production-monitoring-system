@@ -47,6 +47,18 @@ enum DowntimeCategory {
   OTHER
 }
 
+enum ImportResource {
+  PRODUCTION
+  TARGET
+  DOWNTIME
+}
+
+enum ImportStatus {
+  COMPLETED
+  PARTIAL
+  FAILED
+}
+
 model Facility {
   id                  Int             @id @default(autoincrement())
   code                String          @unique @db.VarChar(20)
@@ -204,4 +216,22 @@ model DowntimeRecord {
   @@index([downtimeReasonId, startedAt])
   @@index([type, startedAt])
   @@map("downtime_records")
+}
+
+model ImportBatch {
+  id           Int            @id @default(autoincrement())
+  resource     ImportResource
+  status       ImportStatus
+  fileName     String         @db.VarChar(255)
+  totalRows    Int
+  validRows    Int
+  invalidRows  Int
+  importedRows Int            @default(0)
+  errorSummary Json?
+  completedAt  DateTime?
+  createdAt    DateTime       @default(now())
+
+  @@index([resource, createdAt])
+  @@index([status, createdAt])
+  @@map("import_batches")
 }

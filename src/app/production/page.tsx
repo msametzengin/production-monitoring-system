@@ -130,6 +130,12 @@ export default async function ProductionPage({
                   </span>
                 )}
               </div>
+              <Link
+                href="/production/import"
+                className="rounded-lg border border-sky-500/50 px-4 py-2 text-sm font-medium text-sky-400 transition hover:bg-sky-500/10"
+              >
+                Excel’den içe aktar
+              </Link>
               <ExcelExportLink
                 resource="production"
                 values={values}
