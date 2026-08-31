@@ -54,6 +54,51 @@ def _parse_quantity(value: Any, row_number: int) -> float:
     return quantity
 
 
+def _parse_rolling_window(value: Any) -> int:
+    if value is None:
+        return 7
+    if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 90:
+        raise AnalysisInputError(
+            "rolling_window_days 1 ile 90 arasında bir tam sayı olmalıdır."
+        )
+    return value
+
+
+def _parse_shift_fields(record: dict[str, Any], row_number: int) -> dict[str, Any] | None:
+    values = (
+        record.get("shift_code"),
+        record.get("shift_name"),
+        record.get("operating_minutes"),
+    )
+    if all(value is None for value in values):
+        return None
+    if any(value is None for value in values):
+        raise AnalysisInputError(
+            f"{row_number}. kayıtta vardiya analizi için shift_code, shift_name ve "
+            "operating_minutes birlikte verilmelidir."
+        )
+
+    shift_code, shift_name, operating_minutes = values
+    if not isinstance(shift_code, str) or not shift_code.strip():
+        raise AnalysisInputError(f"{row_number}. kaydın vardiya kodu boş olamaz.")
+    if not isinstance(shift_name, str) or not shift_name.strip():
+        raise AnalysisInputError(f"{row_number}. kaydın vardiya adı boş olamaz.")
+    if (
+        isinstance(operating_minutes, bool)
+        or not isinstance(operating_minutes, int)
+        or operating_minutes < 0
+    ):
+        raise AnalysisInputError(
+            f"{row_number}. kaydın çalışma süresi sıfır veya daha büyük tam sayı olmalıdır."
+        )
+
+    return {
+        "shift_code": shift_code.strip().upper(),
+        "shift_name": shift_name.strip(),
+        "operating_minutes": operating_minutes,
+    }
+
+
 def _convert_quantity(quantity: float, source_unit: str, output_unit: str) -> float:
     if source_unit == output_unit:
         return quantity
@@ -81,6 +126,8 @@ def prepare_daily_series(payload: dict[str, Any]) -> dict[str, Any]:
 
     parsed_records: list[dict[str, Any]] = []
     detected_units: set[str] = set()
+    rolling_window_days = _parse_rolling_window(payload.get("rolling_window_days"))
+    records_with_shift_data = 0
 
     for index, record in enumerate(records, start=1):
         if not isinstance(record, dict):
@@ -89,9 +136,22 @@ def prepare_daily_series(payload: dict[str, Any]) -> dict[str, Any]:
         record_date = _parse_iso_date(record.get("date"), f"{index}. kaydın tarihi")
         unit = _parse_unit(record.get("unit"), f"{index}. kaydın birimi")
         quantity = _parse_quantity(record.get("quantity"), index)
+        shift_fields = _parse_shift_fields(record, index)
+        if shift_fields is not None:
+            records_with_shift_data += 1
         detected_units.add(unit)
         parsed_records.append(
-            {"date": record_date.isoformat(), "quantity": quantity, "unit": unit}
+            {
+                "date": record_date.isoformat(),
+                "quantity": quantity,
+                "unit": unit,
+                **(shift_fields or {}),
+            }
+        )
+
+    if records_with_shift_data not in {0, len(parsed_records)}:
+        raise AnalysisInputError(
+            "Vardiya karşılaştırması için tüm kayıtlarda vardiya bilgileri bulunmalıdır."
         )
 
     if output_unit is None:
@@ -171,6 +231,16 @@ def prepare_daily_series(payload: dict[str, Any]) -> dict[str, Any]:
     else:
         series = calendar.assign(quantity=float("nan"), record_count=float("nan"))
 
+    series["moving_average"] = (
+        series["quantity"]
+        .rolling(window=rolling_window_days, min_periods=1)
+        .mean()
+        .round(6)
+    )
+    series["observations_in_window"] = (
+        series["quantity"].rolling(window=rolling_window_days, min_periods=1).count()
+    )
+
     points: list[dict[str, Any]] = []
     for row in series.itertuples(index=False):
         is_missing = pd.isna(row.quantity)
@@ -180,11 +250,53 @@ def prepare_daily_series(payload: dict[str, Any]) -> dict[str, Any]:
                 "quantity": None if is_missing else float(row.quantity),
                 "is_missing": bool(is_missing),
                 "record_count": 0 if is_missing else int(row.record_count),
+                "moving_average": (
+                    None
+                    if pd.isna(row.moving_average)
+                    else float(row.moving_average)
+                ),
+                "observations_in_window": int(row.observations_in_window),
             }
         )
 
     missing_day_count = sum(1 for point in points if point["is_missing"])
     observed_points = [point for point in points if not point["is_missing"]]
+    shift_summary: list[dict[str, Any]] = []
+
+    if records_with_shift_data:
+        shift_frame = pd.DataFrame(parsed_records)
+        grouped_shifts = (
+            shift_frame.groupby(["shift_code", "shift_name"], as_index=False)
+            .agg(
+                total_quantity=("quantity", "sum"),
+                average_quantity=("quantity", "mean"),
+                record_count=("quantity", "size"),
+                total_operating_minutes=("operating_minutes", "sum"),
+            )
+            .sort_values(["shift_code", "shift_name"])
+        )
+
+        for row in grouped_shifts.itertuples(index=False):
+            quantity_per_operating_hour = (
+                row.total_quantity / row.total_operating_minutes * 60
+                if row.total_operating_minutes > 0
+                else None
+            )
+            shift_summary.append(
+                {
+                    "shift_code": row.shift_code,
+                    "shift_name": row.shift_name,
+                    "record_count": int(row.record_count),
+                    "total_quantity": round(float(row.total_quantity), 6),
+                    "average_quantity": round(float(row.average_quantity), 6),
+                    "total_operating_minutes": int(row.total_operating_minutes),
+                    "quantity_per_operating_hour": (
+                        round(float(quantity_per_operating_hour), 6)
+                        if quantity_per_operating_hour is not None
+                        else None
+                    ),
+                }
+            )
 
     return {
         "start_date": start_date.isoformat(),
@@ -193,6 +305,7 @@ def prepare_daily_series(payload: dict[str, Any]) -> dict[str, Any]:
         "calendar_day_count": len(points),
         "observed_day_count": len(observed_points),
         "missing_day_count": missing_day_count,
+        "rolling_window_days": rolling_window_days,
         "total_quantity": round(
             sum(
                 point["quantity"]
@@ -202,6 +315,7 @@ def prepare_daily_series(payload: dict[str, Any]) -> dict[str, Any]:
             6,
         ),
         "points": points,
+        "shift_summary": shift_summary,
     }
 
 

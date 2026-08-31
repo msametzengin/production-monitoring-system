@@ -10,6 +10,8 @@ Bu klasör, web uygulamasından bağımsız test edilebilen üretim analizi kodu
 - Kaydedilmiş gerçek sıfır değeri `quantity: 0` ve `is_missing: false` olarak korunur.
 - Ton ve kilogram yalnız açık bir hedef birim verilerek dönüştürülebilir.
 - Metreküp ve adet, kütle birimleriyle aynı seride toplanamaz.
+- Hareketli ortalama eksik günleri sıfır kabul etmez; penceredeki mevcut gözlemleri kullanır.
+- Vardiya özeti toplam, kayıt ortalaması ve çalışma saati başına üretimi ayrı gösterir.
 
 ## Komut satırı sözleşmesi
 

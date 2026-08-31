@@ -9,6 +9,7 @@ import {
   Target,
   TriangleAlert,
   ClipboardList,
+  ChartNoAxesCombined,
 } from "lucide-react";
 
 const navigationItems = [
@@ -16,6 +17,11 @@ const navigationItems = [
     href: "/",
     label: "Dashboard",
     icon: Gauge,
+  },
+  {
+    href: "/analytics",
+    label: "Analiz",
+    icon: ChartNoAxesCombined,
   },
   {
     href: "/facilities",
