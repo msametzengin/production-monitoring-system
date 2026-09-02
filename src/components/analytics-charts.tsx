@@ -61,7 +61,11 @@ export function AnalyticsCharts({
     );
   }
 
-  const { analysis, unitLabel } = activeSeries;
+  const {
+  analysis,
+  unitLabel,
+  performance,
+} = activeSeries;
 
   const observedRate =
     analysis.calendarDayCount > 0
@@ -253,7 +257,166 @@ export function AnalyticsCharts({
           bulunmadığını gösterir.
         </p>
       </section>
+            <section className="rounded-xl border border-slate-800 bg-slate-900 p-5">
+        <div className="mb-5">
+          <h2 className="text-lg font-semibold">
+            Operasyonel Performans
+          </h2>
 
+          <p className="mt-2 text-sm text-slate-400">
+            Kayıtlı vardiyalar ve kayıt bulunan günler
+            üzerinden hesaplanan üretim KPI’ları
+          </p>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <article className="rounded-lg border border-slate-800 bg-slate-950 p-4">
+            <p className="text-sm text-slate-400">
+              Kayıt bazlı çalışma oranı
+            </p>
+
+            <p className="mt-2 text-xl font-bold text-emerald-400">
+              {performance.operatingRate === null
+                ? "—"
+                : `%${performance.operatingRate.toLocaleString(
+                    "tr-TR",
+                    {
+                      maximumFractionDigits: 1,
+                    },
+                  )}`}
+            </p>
+
+            <p className="mt-2 text-xs text-slate-500">
+              Çalışılan süre / kayıtlı vardiya planı
+            </p>
+          </article>
+
+          <article className="rounded-lg border border-slate-800 bg-slate-950 p-4">
+            <p className="text-sm text-slate-400">
+              Kapasite kullanımı
+            </p>
+
+            <p className="mt-2 text-xl font-bold text-sky-400">
+              {performance.capacityUtilization === null
+                ? "—"
+                : `%${performance.capacityUtilization.toLocaleString(
+                    "tr-TR",
+                    {
+                      maximumFractionDigits: 1,
+                    },
+                  )}`}
+            </p>
+
+            <p className="mt-2 text-xs text-slate-500">
+              Yalnızca kayıt bulunan günlerin nominal
+              kapasitesi kullanılır
+            </p>
+          </article>
+
+          <article className="rounded-lg border border-slate-800 bg-slate-950 p-4">
+            <p className="text-sm text-slate-400">
+              Saatlik üretim
+            </p>
+
+            <p className="mt-2 text-xl font-bold">
+              {performance.quantityPerOperatingHour ===
+              null
+                ? "—"
+                : `${formatNumber(
+                    performance.quantityPerOperatingHour,
+                  )} ${unitLabel}/sa`}
+            </p>
+
+            <p className="mt-2 text-xs text-slate-500">
+              Toplam üretim / gerçek çalışma süresi
+            </p>
+          </article>
+
+          <article className="rounded-lg border border-slate-800 bg-slate-950 p-4">
+            <p className="text-sm text-slate-400">
+              Ortalama günlük üretim
+            </p>
+
+            <p className="mt-2 text-xl font-bold">
+              {performance.averageDailyQuantity === null
+                ? "—"
+                : `${formatNumber(
+                    performance.averageDailyQuantity,
+                  )} ${unitLabel}`}
+            </p>
+
+            <p className="mt-2 text-xs text-slate-500">
+              Eksik günler ortalamaya sıfır olarak
+              katılmaz
+            </p>
+          </article>
+
+          <article className="rounded-lg border border-slate-800 bg-slate-950 p-4">
+            <p className="text-sm text-slate-400">
+              Kayıtlı çalışma
+            </p>
+
+            <p className="mt-2 text-xl font-bold">
+              {performance.totalOperatingMinutes.toLocaleString(
+                "tr-TR",
+              )}{" "}
+              dk
+            </p>
+
+            <p className="mt-2 text-xs text-slate-500">
+              Planlanan:{" "}
+              {performance.totalPlannedMinutes.toLocaleString(
+                "tr-TR",
+              )}{" "}
+              dk
+            </p>
+          </article>
+
+          <article className="rounded-lg border border-slate-800 bg-slate-950 p-4">
+            <p className="text-sm text-slate-400">
+              Planlanan süre farkı
+            </p>
+
+            <p
+              className={
+                performance.lostPlannedMinutes > 0
+                  ? "mt-2 text-xl font-bold text-amber-400"
+                  : "mt-2 text-xl font-bold text-emerald-400"
+              }
+            >
+              {performance.lostPlannedMinutes.toLocaleString(
+                "tr-TR",
+              )}{" "}
+              dk
+            </p>
+
+            <p className="mt-2 text-xs text-slate-500">
+              Planlanan süre − kayıtlı çalışma
+            </p>
+          </article>
+        </div>
+
+        {performance.nominalDailyCapacity === null ? (
+          <p className="mt-4 rounded-lg border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-xs text-amber-300">
+            Bu tesis–ürün ilişkisi için nominal günlük
+            kapasite girilmediğinden kapasite kullanımı
+            hesaplanamadı.
+          </p>
+        ) : (
+          <p className="mt-4 text-xs leading-5 text-slate-500">
+            Nominal günlük kapasite:{" "}
+            {formatNumber(
+              performance.nominalDailyCapacity,
+            )}{" "}
+            {unitLabel}/gün. Analiz dönemi kapasite
+            referansı:{" "}
+            {formatNumber(
+              performance.capacityReference,
+            )}{" "}
+            {unitLabel}.
+          </p>
+        )}
+      </section>
       <section className="rounded-xl border border-slate-800 bg-slate-900 p-5">
         <div className="mb-5">
           <h2 className="text-lg font-semibold">

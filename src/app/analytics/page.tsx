@@ -1,10 +1,18 @@
 import { AnalyticsCharts } from "@/components/analytics-charts";
+import { AnalyticsInsights } from "@/components/analytics-insights";
 import { RecordFilters } from "@/components/record-filters";
-import type { ProductionAnalyticsSeries } from "@/lib/analytics/types";
+import type {
+  DowntimeParetoAnalysis,
+  ProductionAnalyticsSeries,
+} from "@/lib/analytics/types";
 import type { FilterSearchParams } from "@/lib/filters";
 import { prisma } from "@/lib/prisma";
-import { getProductionAnalytics } from "@/lib/queries/analytics";
+import {
+  getDowntimePareto,
+  getProductionAnalytics,
+} from "@/lib/queries/analytics";
 import { parseProductionFilters } from "@/lib/queries/production";
+import { parseDowntimeFilters } from "@/lib/queries/downtimes";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -23,6 +31,14 @@ export default async function AnalyticsPage({
     q: "",
     shiftId: "",
     status: "active",
+    source: "all",
+  });
+  const downtimeFilters = parseDowntimeFilters({
+    ...params,
+    q: "",
+    reasonId: "",
+    type: "all",
+    category: "all",
     source: "all",
   });
 
@@ -54,17 +70,31 @@ export default async function AnalyticsPage({
     ]);
 
   let analyticsData: ProductionAnalyticsSeries[] = [];
+
+  let downtimePareto: DowntimeParetoAnalysis = {
+    totalMinutes: 0,
+    totalRecords: 0,
+    vitalReasonCount: 0,
+    items: [],
+  };
+
   let analysisError: string | null = null;
 
-  if (filters.where !== null) {
+  if (
+    filters.where !== null &&
+    downtimeFilters.where !== null
+  ) {
     try {
-      analyticsData =
-        await getProductionAnalytics(filters);
+      [analyticsData, downtimePareto] =
+        await Promise.all([
+          getProductionAnalytics(filters),
+          getDowntimePareto(downtimeFilters),
+        ]);
     } catch (error) {
       analysisError =
         error instanceof Error
           ? error.message
-          : "Üretim analizi oluşturulamadı.";
+          : "Analizler oluşturulamadı.";
     }
   }
 
@@ -117,7 +147,7 @@ export default async function AnalyticsPage({
         <RecordFilters
           action="/analytics"
           values={filterValues}
-          error={filters.error}
+          error={filters.error ?? downtimeFilters.error}
           fields={[
             {
               name: "facilityId",
@@ -130,11 +160,10 @@ export default async function AnalyticsPage({
                 },
                 ...facilityOptions.map((facility) => ({
                   value: String(facility.id),
-                  label: `${facility.code} · ${facility.name}${
-                    facility.isActive
+                  label: `${facility.code} · ${facility.name}${facility.isActive
                       ? ""
                       : " (pasif)"
-                  }`,
+                    }`,
                 })),
               ],
             },
@@ -149,11 +178,10 @@ export default async function AnalyticsPage({
                 },
                 ...productOptions.map((product) => ({
                   value: String(product.id),
-                  label: `${product.code} · ${product.name}${
-                    product.isActive
+                  label: `${product.code} · ${product.name}${product.isActive
                       ? ""
                       : " (pasif)"
-                  }`,
+                    }`,
                 })),
               ],
             },
@@ -183,13 +211,20 @@ export default async function AnalyticsPage({
               {analysisError}
             </p>
           </div>
-        ) : filters.error ? (
+        ) : filters.error ?? downtimeFilters.error ? (
           <div className="rounded-xl border border-slate-800 p-8 text-slate-400">
             Analizi görmek için filtre hatasını
             düzeltin.
           </div>
         ) : (
-          <AnalyticsCharts data={analyticsData} />
+          <>
+            <AnalyticsCharts data={analyticsData} />
+
+            <AnalyticsInsights
+              production={analyticsData}
+              downtime={downtimePareto}
+            />
+          </>
         )}
       </div>
     </main>
