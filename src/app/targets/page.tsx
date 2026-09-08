@@ -19,6 +19,103 @@ const periodLabels = {
   CUSTOM: "Özel dönem",
 } as const;
 
+const DAY_IN_MILLISECONDS = 86_400_000;
+
+type TargetHealth =
+  | "INACTIVE"
+  | "PLANNED"
+  | "ACHIEVED"
+  | "MISSED"
+  | "ON_TRACK"
+  | "AT_RISK"
+  | "BEHIND";
+
+const targetHealthLabels: Record<TargetHealth, string> = {
+  INACTIVE: "Pasif",
+  PLANNED: "Planlandı",
+  ACHIEVED: "Tamamlandı",
+  MISSED: "Hedef kaçtı",
+  ON_TRACK: "Hedefte",
+  AT_RISK: "Riskli",
+  BEHIND: "Geride",
+};
+
+const targetHealthClasses: Record<TargetHealth, string> = {
+  INACTIVE: "bg-slate-800 text-slate-300",
+  PLANNED: "bg-blue-950 text-blue-300",
+  ACHIEVED: "bg-emerald-950 text-emerald-300",
+  MISSED: "bg-red-950 text-red-300",
+  ON_TRACK: "bg-emerald-950 text-emerald-300",
+  AT_RISK: "bg-amber-950 text-amber-300",
+  BEHIND: "bg-red-950 text-red-300",
+};
+
+function startOfUtcDay(date: Date) {
+  return new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
+  );
+}
+
+function getInclusiveDayCount(startDate: Date, endDate: Date) {
+  return (
+    Math.floor(
+      (startOfUtcDay(endDate).getTime() -
+        startOfUtcDay(startDate).getTime()) /
+      DAY_IN_MILLISECONDS,
+    ) + 1
+  );
+}
+
+function formatQuantity(value: number | null) {
+  if (value === null) {
+    return "—";
+  }
+
+  return value.toLocaleString("tr-TR", {
+    maximumFractionDigits: 3,
+  });
+}
+
+function getTargetHealth({
+  isActive,
+  startDate,
+  endDate,
+  currentDate,
+  actualQuantity,
+  targetQuantity,
+  forecastRate,
+}: {
+  isActive: boolean;
+  startDate: Date;
+  endDate: Date;
+  currentDate: Date;
+  actualQuantity: number;
+  targetQuantity: number;
+  forecastRate: number | null;
+}): TargetHealth {
+  if (!isActive) {
+    return "INACTIVE";
+  }
+
+  if (currentDate < startDate) {
+    return "PLANNED";
+  }
+
+  if (currentDate > endDate) {
+    return actualQuantity >= targetQuantity ? "ACHIEVED" : "MISSED";
+  }
+
+  if ((forecastRate ?? 0) >= 100) {
+    return "ON_TRACK";
+  }
+
+  if ((forecastRate ?? 0) >= 90) {
+    return "AT_RISK";
+  }
+
+  return "BEHIND";
+}
+
 export const dynamic = "force-dynamic";
 
 export default async function TargetsPage({
@@ -71,14 +168,15 @@ export default async function TargetsPage({
       }),
     ]);
 
+  const currentDate = startOfUtcDay(new Date());
+
   const targetSummaries = await Promise.all(
     productionTargets.map(async (target) => {
       const productionSummary =
         await prisma.productionRecord.aggregate({
           where: {
             archivedAt: null,
-            facilityProductId:
-              target.facilityProductId,
+            facilityProductId: target.facilityProductId,
             recordDate: {
               gte: target.startDate,
               lte: target.endDate,
@@ -93,9 +191,7 @@ export default async function TargetsPage({
         productionSummary._sum.quantity ?? 0,
       );
 
-      const targetQuantity = Number(
-        target.targetQuantity,
-      );
+      const targetQuantity = Number(target.targetQuantity);
 
       const realizationRate =
         targetQuantity > 0
@@ -104,11 +200,92 @@ export default async function TargetsPage({
           ) / 10
           : 0;
 
+      const periodDayCount = getInclusiveDayCount(
+        target.startDate,
+        target.endDate,
+      );
+
+      let elapsedDayCount = 0;
+
+      if (currentDate.getTime() >= target.startDate.getTime()) {
+        const elapsedEndDate =
+          currentDate.getTime() > target.endDate.getTime()
+            ? target.endDate
+            : currentDate;
+
+        elapsedDayCount = getInclusiveDayCount(
+          target.startDate,
+          elapsedEndDate,
+        );
+      }
+
+      const remainingDayCount = Math.max(
+        periodDayCount - elapsedDayCount,
+        0,
+      );
+
+      const expectedQuantity =
+        periodDayCount > 0
+          ? targetQuantity *
+          (elapsedDayCount / periodDayCount)
+          : 0;
+
+      const deviationQuantity =
+        actualQuantity - expectedQuantity;
+
+      const remainingQuantity = Math.max(
+        targetQuantity - actualQuantity,
+        0,
+      );
+
+      const averageDailyQuantity =
+        elapsedDayCount > 0
+          ? actualQuantity / elapsedDayCount
+          : null;
+
+      let forecastQuantity: number | null = null;
+
+      if (averageDailyQuantity !== null) {
+        forecastQuantity =
+          remainingDayCount === 0
+            ? actualQuantity
+            : averageDailyQuantity * periodDayCount;
+      }
+
+      const requiredDailyQuantity =
+        remainingDayCount > 0
+          ? remainingQuantity / remainingDayCount
+          : null;
+
+      const forecastRate =
+        forecastQuantity !== null && targetQuantity > 0
+          ? Math.round(
+            (forecastQuantity / targetQuantity) * 1000,
+          ) / 10
+          : null;
+
+      const health = getTargetHealth({
+        isActive: target.isActive,
+        startDate: target.startDate,
+        endDate: target.endDate,
+        currentDate,
+        actualQuantity,
+        targetQuantity,
+        forecastRate,
+      });
+
       return {
         ...target,
         actualQuantity,
         targetQuantity,
         realizationRate,
+        remainingQuantity,
+        remainingDayCount,
+        deviationQuantity,
+        requiredDailyQuantity,
+        forecastQuantity,
+        forecastRate,
+        health,
       };
     }),
   );
@@ -286,15 +463,10 @@ export default async function TargetsPage({
 
                     <div className="flex flex-col items-end gap-2">
                       <span
-                        className={
-                          target.isActive
-                            ? "rounded-full bg-emerald-500/15 px-3 py-1 text-xs text-emerald-400"
-                            : "rounded-full bg-slate-700 px-3 py-1 text-xs text-slate-300"
-                        }
+                        className={`rounded-full px-3 py-1 text-xs font-medium ${targetHealthClasses[target.health]
+                          }`}
                       >
-                        {target.isActive
-                          ? "Aktif"
-                          : "Pasif"}
+                        {targetHealthLabels[target.health]}
                       </span>
 
                       <span
@@ -356,31 +528,75 @@ export default async function TargetsPage({
                     />
                   </div>
 
-                  <dl className="mt-5 grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <dt className="text-slate-400">
+                  <dl className="mt-5 grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-3">
+                    <div className="rounded-lg bg-slate-950 p-3">
+                      <dt className="text-xs text-slate-400">
                         Hedef
                       </dt>
-
-                      <dd className="mt-1 text-lg font-semibold">
-                        {target.targetQuantity.toLocaleString(
-                          "tr-TR",
-                        )}{" "}
-                        {unit}
+                      <dd className="mt-1 font-semibold text-white">
+                        {formatQuantity(target.targetQuantity)} {unit}
                       </dd>
                     </div>
 
-                    <div className="text-right">
-                      <dt className="text-slate-400">
+                    <div className="rounded-lg bg-slate-950 p-3">
+                      <dt className="text-xs text-slate-400">
                         Gerçekleşen
                       </dt>
-
-                      <dd className="mt-1 text-lg font-semibold">
-                        {target.actualQuantity.toLocaleString(
-                          "tr-TR",
-                        )}{" "}
-                        {unit}
+                      <dd className="mt-1 font-semibold text-white">
+                        {formatQuantity(target.actualQuantity)} {unit}
                       </dd>
+                    </div>
+
+                    <div className="rounded-lg bg-slate-950 p-3">
+                      <dt className="text-xs text-slate-400">
+                        Kalan üretim
+                      </dt>
+                      <dd className="mt-1 font-semibold text-white">
+                        {formatQuantity(target.remainingQuantity)} {unit}
+                      </dd>
+                    </div>
+
+                    <div className="rounded-lg bg-slate-950 p-3">
+                      <dt className="text-xs text-slate-400">
+                        Plan çizgisine göre sapma
+                      </dt>
+                      <dd
+                        className={`mt-1 font-semibold ${target.deviationQuantity >= 0
+                            ? "text-emerald-400"
+                            : "text-red-400"
+                          }`}
+                      >
+                        {target.deviationQuantity > 0 ? "+" : ""}
+                        {formatQuantity(target.deviationQuantity)} {unit}
+                      </dd>
+                    </div>
+
+                    <div className="rounded-lg bg-slate-950 p-3">
+                      <dt className="text-xs text-slate-400">
+                        Günlük gerekli üretim
+                      </dt>
+                      <dd className="mt-1 font-semibold text-white">
+                        {formatQuantity(target.requiredDailyQuantity)} {unit}
+                      </dd>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {target.remainingDayCount > 0
+                          ? `${target.remainingDayCount} gün kaldı`
+                          : "Dönem sona erdi"}
+                      </p>
+                    </div>
+
+                    <div className="rounded-lg bg-slate-950 p-3">
+                      <dt className="text-xs text-slate-400">
+                        Dönem sonu tahmini
+                      </dt>
+                      <dd className="mt-1 font-semibold text-white">
+                        {formatQuantity(target.forecastQuantity)} {unit}
+                      </dd>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {target.forecastRate === null
+                          ? "Henüz gerçekleşme yok"
+                          : `%${target.forecastRate.toLocaleString("tr-TR")}`}
+                      </p>
                     </div>
                   </dl>
 

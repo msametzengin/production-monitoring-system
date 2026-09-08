@@ -46,8 +46,8 @@ function formatNumber(value: unknown) {
 
   return Number.isFinite(number)
     ? number.toLocaleString("tr-TR", {
-        maximumFractionDigits: 3,
-      })
+      maximumFractionDigits: 3,
+    })
     : "—";
 }
 
@@ -71,6 +71,147 @@ export function AnalyticsInsights({
 
   return (
     <div className="mt-6 space-y-6">
+      <section className="rounded-xl border border-slate-800 bg-slate-900 p-5">
+        <div className="mb-5">
+          <h2 className="text-xl font-semibold">
+            Tahmini Üretim Kaybı
+          </h2>
+
+          <p className="mt-2 text-sm text-slate-400">
+            Gerçekleşen saatlik üretim hızının duruş
+            süresi boyunca korunacağı varsayımıyla
+            hesaplanır.
+          </p>
+        </div>
+
+        {!activeSeries ? (
+          <p className="py-10 text-sm text-slate-400">
+            Kayıp hesabı için üretim kaydı bulunmuyor.
+          </p>
+        ) : (
+          <>
+            <label
+              htmlFor="loss-series"
+              className="block text-sm text-slate-400"
+            >
+              Analiz edilecek tesis ve ürün
+            </label>
+
+            <select
+              id="loss-series"
+              value={activeSeries.id}
+              onChange={(event) =>
+                setSelectedId(Number(event.target.value))
+              }
+              className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm outline-none focus:border-emerald-500"
+            >
+              {production.map((series) => (
+                <option
+                  key={series.id}
+                  value={series.id}
+                >
+                  {series.label} ({series.unitLabel})
+                </option>
+              ))}
+            </select>
+
+            <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              <article className="rounded-lg border border-slate-800 bg-slate-950 p-4">
+                <p className="text-sm text-slate-400">
+                  Toplam tahmini kayıp
+                </p>
+
+                <p className="mt-2 text-xl font-bold text-red-400">
+                  {formatNumber(
+                    activeSeries.lossEstimate
+                      .totalEstimatedLoss,
+                  )}{" "}
+                  {activeSeries.unitLabel}
+                </p>
+              </article>
+
+              <article className="rounded-lg border border-slate-800 bg-slate-950 p-4">
+                <p className="text-sm text-slate-400">
+                  Plansız duruş kaybı
+                </p>
+
+                <p className="mt-2 text-xl font-bold text-red-400">
+                  {formatNumber(
+                    activeSeries.lossEstimate
+                      .unplannedEstimatedLoss,
+                  )}{" "}
+                  {activeSeries.unitLabel}
+                </p>
+              </article>
+
+              <article className="rounded-lg border border-slate-800 bg-slate-950 p-4">
+                <p className="text-sm text-slate-400">
+                  Planlı duruş kaybı
+                </p>
+
+                <p className="mt-2 text-xl font-bold text-amber-400">
+                  {formatNumber(
+                    activeSeries.lossEstimate
+                      .plannedEstimatedLoss,
+                  )}{" "}
+                  {activeSeries.unitLabel}
+                </p>
+              </article>
+
+              <article className="rounded-lg border border-slate-800 bg-slate-950 p-4">
+                <p className="text-sm text-slate-400">
+                  Tahmini kayıp oranı
+                </p>
+
+                <p className="mt-2 text-xl font-bold">
+                  {activeSeries.lossEstimate.lossRate ===
+                    null
+                    ? "—"
+                    : `%${formatNumber(
+                      activeSeries.lossEstimate
+                        .lossRate,
+                    )}`}
+                </p>
+              </article>
+
+              <article className="rounded-lg border border-slate-800 bg-slate-950 p-4">
+                <p className="text-sm text-slate-400">
+                  Hesaba giren duruş
+                </p>
+
+                <p className="mt-2 text-xl font-bold">
+                  {formatNumber(
+                    activeSeries.lossEstimate
+                      .totalDowntimeMinutes,
+                  )}{" "}
+                  dk
+                </p>
+              </article>
+
+              <article className="rounded-lg border border-slate-800 bg-slate-950 p-4">
+                <p className="text-sm text-slate-400">
+                  Saatlik üretim hızı
+                </p>
+
+                <p className="mt-2 text-xl font-bold text-sky-400">
+                  {formatNumber(
+                    activeSeries.lossEstimate
+                      .quantityPerOperatingHour,
+                  )}{" "}
+                  {activeSeries.unitLabel}/sa
+                </p>
+              </article>
+            </div>
+
+            <p className="mt-5 text-xs leading-5 text-slate-500">
+              Duruş kayıtları tesis seviyesindedir. Aynı
+              tesiste birden fazla ürün varsa sonuç,
+              seçilen ürün serisinin saatlik hızına göre
+              ayrı ayrı tahmin edilir.
+            </p>
+          </>
+        )}
+      </section>
       <section className="rounded-xl border border-slate-800 bg-slate-900 p-5">
         <div className="mb-5">
           <h2 className="mt-2 text-xl font-semibold">
@@ -188,7 +329,7 @@ export function AnalyticsInsights({
                   }}
                   formatter={(value, name) =>
                     String(name) ===
-                    "Kümülatif oran"
+                      "Kümülatif oran"
                       ? `%${formatNumber(value)}`
                       : `${formatNumber(value)} dk`
                   }
@@ -491,7 +632,7 @@ export function AnalyticsInsights({
 
                             <p className="mt-1 text-xs text-red-200/70">
                               {point.direction ===
-                              "HIGH"
+                                "HIGH"
                                 ? "Beklenen aralığın üzerinde"
                                 : "Beklenen aralığın altında"}
                             </p>
@@ -510,14 +651,14 @@ export function AnalyticsInsights({
                             <p className="mt-1 text-xs text-red-200/70">
                               Medyana göre{" "}
                               {point.deviationPercent ===
-                              null
+                                null
                                 ? "—"
                                 : `%${point.deviationPercent.toLocaleString(
-                                    "tr-TR",
-                                    {
-                                      maximumFractionDigits: 1,
-                                    },
-                                  )}`}
+                                  "tr-TR",
+                                  {
+                                    maximumFractionDigits: 1,
+                                  },
+                                )}`}
                             </p>
                           </div>
                         </article>

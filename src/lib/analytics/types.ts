@@ -76,11 +76,24 @@ export type DowntimeParetoAnalysis = {
   vitalReasonCount: number;
   items: DowntimeParetoItem[];
 };
+
+export type ProductionLossEstimate = {
+  totalDowntimeMinutes: number;
+  plannedDowntimeMinutes: number;
+  unplannedDowntimeMinutes: number;
+  quantityPerOperatingHour: number | null;
+  totalEstimatedLoss: number | null;
+  plannedEstimatedLoss: number | null;
+  unplannedEstimatedLoss: number | null;
+  lossRate: number | null;
+};
+
 export type ProductionAnalyticsSeries = {
   id: number;
   label: string;
   unitLabel: string;
   analysis: ProductionAnalysis;
   performance: PerformanceSummary;
+  lossEstimate: ProductionLossEstimate;
   anomalySummary: ProductionAnomalySummary;
 };

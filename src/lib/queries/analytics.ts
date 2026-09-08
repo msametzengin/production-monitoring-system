@@ -53,7 +53,7 @@ function quantile(
   return (
     lowerValue +
     (upperValue - lowerValue) *
-      (position - lowerIndex)
+    (position - lowerIndex)
   );
 }
 
@@ -64,11 +64,11 @@ function createAnomalySummary(
     point.quantity === null
       ? []
       : [
-          {
-            date: point.date,
-            quantity: point.quantity,
-          },
-        ],
+        {
+          date: point.date,
+          quantity: point.quantity,
+        },
+      ],
   );
 
   if (observedPoints.length < 4) {
@@ -126,10 +126,10 @@ function createAnomalySummary(
       deviationPercent:
         median !== 0
           ? roundNumber(
-              ((point.quantity - median) /
-                median) *
-                100,
-            )
+            ((point.quantity - median) /
+              median) *
+            100,
+          )
           : null,
     }));
 
@@ -187,6 +187,7 @@ export async function getProductionAnalytics(
           nominalDailyCapacity: true,
           facility: {
             select: {
+              id: true,
               code: true,
               name: true,
             },
@@ -303,6 +304,93 @@ export async function getProductionAnalytics(
           ) / 1000
           : null;
 
+      const downtimeGroups =
+        await prisma.downtimeRecord.groupBy({
+          by: ["type"],
+          where: {
+            facilityId:
+              first.facilityProduct.facility.id,
+            startedAt: {
+              gte: new Date(
+                `${analysis.startDate}T00:00:00.000Z`,
+              ),
+              lte: new Date(
+                `${analysis.endDate}T23:59:59.999Z`,
+              ),
+            },
+          },
+          _sum: {
+            durationMinutes: true,
+          },
+        });
+
+      const plannedDowntimeMinutes =
+        downtimeGroups.find(
+          (group) => group.type === "PLANNED",
+        )?._sum.durationMinutes ?? 0;
+
+      const unplannedDowntimeMinutes =
+        downtimeGroups.find(
+          (group) => group.type === "UNPLANNED",
+        )?._sum.durationMinutes ?? 0;
+
+      const totalDowntimeMinutes =
+        plannedDowntimeMinutes +
+        unplannedDowntimeMinutes;
+
+      const plannedEstimatedLoss =
+        quantityPerOperatingHour === null
+          ? null
+          : roundNumber(
+            quantityPerOperatingHour *
+            (plannedDowntimeMinutes / 60),
+          );
+
+      const unplannedEstimatedLoss =
+        quantityPerOperatingHour === null
+          ? null
+          : roundNumber(
+            quantityPerOperatingHour *
+            (unplannedDowntimeMinutes / 60),
+          );
+
+      const totalEstimatedLoss =
+        plannedEstimatedLoss === null ||
+          unplannedEstimatedLoss === null
+          ? null
+          : roundNumber(
+            plannedEstimatedLoss +
+            unplannedEstimatedLoss,
+          );
+
+      const potentialQuantity =
+        totalEstimatedLoss === null
+          ? null
+          : analysis.totalQuantity +
+          totalEstimatedLoss;
+
+      const lossRate =
+        totalEstimatedLoss !== null &&
+          potentialQuantity !== null &&
+          potentialQuantity > 0
+          ? roundNumber(
+            (totalEstimatedLoss /
+              potentialQuantity) *
+            100,
+          )
+          : null;
+
+      const lossEstimate = {
+        totalDowntimeMinutes,
+        plannedDowntimeMinutes,
+        unplannedDowntimeMinutes,
+        quantityPerOperatingHour,
+        totalEstimatedLoss,
+        plannedEstimatedLoss,
+        unplannedEstimatedLoss,
+        lossRate,
+      };
+
       const performance = {
         totalOperatingMinutes,
         totalPlannedMinutes,
@@ -327,6 +415,7 @@ export async function getProductionAnalytics(
         unitLabel: unitLabels[unit],
         analysis,
         performance,
+        lossEstimate,
         anomalySummary,
       };
     }),
