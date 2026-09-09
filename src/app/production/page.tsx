@@ -4,7 +4,10 @@ import { RecordStatusButton } from "./record-status-button";
 import { RecordFilters } from "@/components/record-filters";
 import { ExcelExportLink } from "@/components/excel-export-link";
 import { parseProductionFilters } from "@/lib/queries/production";
-import type { FilterSearchParams } from "@/lib/filters";
+import {
+  getQueryValue,
+  type FilterSearchParams,
+} from "@/lib/filters";
 
 const measurementUnitLabels = {
   TON: "ton",
@@ -18,6 +21,7 @@ const sourceLabels = {
   EXCEL_IMPORT: "Excel",
 } as const;
 
+const PAGE_SIZE = 50;
 export const dynamic = "force-dynamic";
 
 export default async function ProductionPage({
@@ -25,81 +29,144 @@ export default async function ProductionPage({
 }: {
   searchParams: Promise<FilterSearchParams>;
 }) {
-  const { values, where, error } = parseProductionFilters(
-    await searchParams,
-  );
+  const params = await searchParams;
 
-  const [productionRecords, facilities, products, shifts] =
-    await Promise.all([
-      where === null
-        ? Promise.resolve([])
-        : prisma.productionRecord.findMany({
-          where,
-          orderBy: [
+  const { values, where, error } =
+    parseProductionFilters(params);
+
+  const rawPage = getQueryValue(params, "page");
+  const parsedPage = Number(rawPage);
+
+  const requestedPage =
+    /^[1-9]\d*$/.test(rawPage) &&
+      Number.isSafeInteger(parsedPage)
+      ? parsedPage
+      : 1;
+
+  const [
+    totalRecordCount,
+    activeRecordCount,
+    archivedRecordCount,
+    facilities,
+    products,
+    shifts,
+  ] = await Promise.all([
+    where === null
+      ? Promise.resolve(0)
+      : prisma.productionRecord.count({ where }),
+
+    where === null
+      ? Promise.resolve(0)
+      : prisma.productionRecord.count({
+        where: {
+          AND: [where, { archivedAt: null }],
+        },
+      }),
+
+    where === null
+      ? Promise.resolve(0)
+      : prisma.productionRecord.count({
+        where: {
+          AND: [
+            where,
             {
-              recordDate: "desc",
-            },
-            {
-              createdAt: "desc",
-            },
-            {
-              id: "desc",
-            },
-          ],
-          include: {
-            shift: true,
-            facilityProduct: {
-              include: {
-                facility: true,
-                product: true,
+              archivedAt: {
+                not: null,
               },
             },
+          ],
+        },
+      }),
+
+    prisma.facility.findMany({
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        isActive: true,
+      },
+      orderBy: {
+        name: "asc",
+      },
+    }),
+
+    prisma.product.findMany({
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        isActive: true,
+      },
+      orderBy: {
+        name: "asc",
+      },
+    }),
+
+    prisma.shift.findMany({
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        isActive: true,
+      },
+      orderBy: {
+        sortOrder: "asc",
+      },
+    }),
+  ]);
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil(totalRecordCount / PAGE_SIZE),
+  );
+
+  const currentPage = Math.min(
+    requestedPage,
+    totalPages,
+  );
+
+  const productionRecords =
+    where === null
+      ? []
+      : await prisma.productionRecord.findMany({
+        where,
+        skip: (currentPage - 1) * PAGE_SIZE,
+        take: PAGE_SIZE,
+        orderBy: [
+          {
+            recordDate: "desc",
           },
-        }),
+          {
+            createdAt: "desc",
+          },
+          {
+            id: "desc",
+          },
+        ],
+        include: {
+          shift: true,
+          facilityProduct: {
+            include: {
+              facility: true,
+              product: true,
+            },
+          },
+        },
+      });
 
-      prisma.facility.findMany({
-        select: {
-          id: true,
-          code: true,
-          name: true,
-          isActive: true,
-        },
-        orderBy: {
-          name: "asc",
-        },
-      }),
+  function createPageHref(pageNumber: number) {
+    const query = new URLSearchParams();
 
-      prisma.product.findMany({
-        select: {
-          id: true,
-          code: true,
-          name: true,
-          isActive: true,
-        },
-        orderBy: {
-          name: "asc",
-        },
-      }),
+    for (const [name, value] of Object.entries(values)) {
+      if (value && value !== "all") {
+        query.set(name, value);
+      }
+    }
 
-      prisma.shift.findMany({
-        select: {
-          id: true,
-          code: true,
-          name: true,
-          isActive: true,
-        },
-        orderBy: {
-          sortOrder: "asc",
-        },
-      }),
-    ]);
+    query.set("page", pageNumber.toString());
 
-  const activeRecordCount = productionRecords.filter(
-    (record) => !record.archivedAt,
-  ).length;
-
-  const archivedRecordCount =
-    productionRecords.length - activeRecordCount;
+    return `/production?${query.toString()}`;
+  }
 
   return (
     <main className="min-h-screen bg-slate-950 px-6 py-10">
@@ -267,123 +334,170 @@ export default async function ProductionPage({
               : "Seçilen filtrelere uygun üretim kaydı bulunamadı."}
           </div>
         ) : (
-          <div className="overflow-x-auto rounded-xl border border-slate-800">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-slate-900 text-slate-400">
-                <tr>
-                  <th className="px-4 py-3 font-medium">Tarih</th>
-                  <th className="px-4 py-3 font-medium">Tesis</th>
-                  <th className="px-4 py-3 font-medium">Ürün</th>
-                  <th className="px-4 py-3 font-medium">Vardiya</th>
-                  <th className="px-4 py-3 text-right font-medium">Üretim</th>
-                  <th className="px-4 py-3 text-right font-medium">
-                    Çalışma
-                  </th>
-                  <th className="px-4 py-3 text-right font-medium">Oran</th>
-                  <th className="px-4 py-3 font-medium">Kaynak</th>
-                  <th className="px-4 py-3 font-medium">Not</th>
-                  <th className="px-4 py-3 font-medium">Durum</th>
-                  <th className="px-4 py-3 font-medium">İşlem</th>
-                </tr>
-              </thead>
+          <>
+            <div className="overflow-x-auto rounded-xl border border-slate-800">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-slate-900 text-slate-400">
+                  <tr>
+                    <th className="px-4 py-3 font-medium">Tarih</th>
+                    <th className="px-4 py-3 font-medium">Tesis</th>
+                    <th className="px-4 py-3 font-medium">Ürün</th>
+                    <th className="px-4 py-3 font-medium">Vardiya</th>
+                    <th className="px-4 py-3 text-right font-medium">Üretim</th>
+                    <th className="px-4 py-3 text-right font-medium">
+                      Çalışma
+                    </th>
+                    <th className="px-4 py-3 text-right font-medium">Oran</th>
+                    <th className="px-4 py-3 font-medium">Kaynak</th>
+                    <th className="px-4 py-3 font-medium">Not</th>
+                    <th className="px-4 py-3 font-medium">Durum</th>
+                    <th className="px-4 py-3 font-medium">İşlem</th>
+                  </tr>
+                </thead>
 
-              <tbody className="divide-y divide-slate-800 bg-slate-900/50">
-                {productionRecords.map((record) => {
-                  const operatingRate =
-                    record.shift.plannedMinutes > 0
-                      ? Math.round(
-                        (record.operatingMinutes /
-                          record.shift.plannedMinutes) *
-                        100,
-                      )
-                      : 0;
+                <tbody className="divide-y divide-slate-800 bg-slate-900/50">
+                  {productionRecords.map((record) => {
+                    const operatingRate =
+                      record.shift.plannedMinutes > 0
+                        ? Math.round(
+                          (record.operatingMinutes /
+                            record.shift.plannedMinutes) *
+                          100,
+                        )
+                        : 0;
 
-                  return (
-                    <tr
-                      key={record.id}
-                      className={
-                        record.archivedAt
-                          ? "bg-slate-950/40 text-slate-500"
-                          : "hover:bg-slate-900"
-                      }
-                    >
-                      <td className="whitespace-nowrap px-4 py-3">
-                        {record.recordDate.toLocaleDateString("tr-TR", {
-                          timeZone: "UTC",
-                        })}
-                      </td>
-
-                      <td className="px-4 py-3">
-                        {record.facilityProduct.facility.name}
-                      </td>
-
-                      <td className="px-4 py-3">
-                        {record.facilityProduct.product.name}
-                      </td>
-
-                      <td className="whitespace-nowrap px-4 py-3">
-                        {record.shift.name}
-                      </td>
-
-                      <td className="whitespace-nowrap px-4 py-3 text-right font-medium">
-                        {Number(record.quantity).toLocaleString("tr-TR")}{" "}
-                        {
-                          measurementUnitLabels[
-                          record.facilityProduct.product.measurementUnit
-                          ]
+                    return (
+                      <tr
+                        key={record.id}
+                        className={
+                          record.archivedAt
+                            ? "bg-slate-950/40 text-slate-500"
+                            : "hover:bg-slate-900"
                         }
-                      </td>
+                      >
+                        <td className="whitespace-nowrap px-4 py-3">
+                          {record.recordDate.toLocaleDateString("tr-TR", {
+                            timeZone: "UTC",
+                          })}
+                        </td>
 
-                      <td className="whitespace-nowrap px-4 py-3 text-right">
-                        {record.operatingMinutes} dk
-                      </td>
+                        <td className="px-4 py-3">
+                          {record.facilityProduct.facility.name}
+                        </td>
 
-                      <td className="whitespace-nowrap px-4 py-3 text-right text-emerald-400">
-                        %{operatingRate}
-                      </td>
+                        <td className="px-4 py-3">
+                          {record.facilityProduct.product.name}
+                        </td>
 
-                      <td className="px-4 py-3">
-                        {sourceLabels[record.source]}
-                      </td>
+                        <td className="whitespace-nowrap px-4 py-3">
+                          {record.shift.name}
+                        </td>
 
-                      <td className="min-w-48 px-4 py-3 text-slate-400">
-                        {record.notes ?? "—"}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3">
-                        <span
-                          className={
-                            record.archivedAt
-                              ? "rounded-full bg-slate-700/50 px-3 py-1 text-xs text-slate-400"
-                              : "rounded-full bg-emerald-500/15 px-3 py-1 text-xs text-emerald-400"
+                        <td className="whitespace-nowrap px-4 py-3 text-right font-medium">
+                          {Number(record.quantity).toLocaleString("tr-TR")}{" "}
+                          {
+                            measurementUnitLabels[
+                            record.facilityProduct.product.measurementUnit
+                            ]
                           }
-                        >
-                          {record.archivedAt ? "Arşivde" : "Aktif"}
-                        </span>
-                      </td>
+                        </td>
 
-                      <td className="whitespace-nowrap px-4 py-3">
-                        <div className="flex items-center gap-4">
-                          {!record.archivedAt && (
-                            <Link
-                              href={`/production/${record.id}/edit`}
-                              className="font-medium text-emerald-400 transition hover:text-emerald-300"
-                            >
-                              Düzenle
-                            </Link>
-                          )}
+                        <td className="whitespace-nowrap px-4 py-3 text-right">
+                          {record.operatingMinutes} dk
+                        </td>
 
-                          <RecordStatusButton
-                            recordId={record.id}
-                            isArchived={Boolean(record.archivedAt)}
-                          />
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                        <td className="whitespace-nowrap px-4 py-3 text-right text-emerald-400">
+                          %{operatingRate}
+                        </td>
+
+                        <td className="px-4 py-3">
+                          {sourceLabels[record.source]}
+                        </td>
+
+                        <td className="min-w-48 px-4 py-3 text-slate-400">
+                          {record.notes ?? "—"}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3">
+                          <span
+                            className={
+                              record.archivedAt
+                                ? "rounded-full bg-slate-700/50 px-3 py-1 text-xs text-slate-400"
+                                : "rounded-full bg-emerald-500/15 px-3 py-1 text-xs text-emerald-400"
+                            }
+                          >
+                            {record.archivedAt ? "Arşivde" : "Aktif"}
+                          </span>
+                        </td>
+
+                        <td className="whitespace-nowrap px-4 py-3">
+                          <div className="flex items-center gap-4">
+                            {!record.archivedAt && (
+                              <Link
+                                href={`/production/${record.id}/edit`}
+                                className="font-medium text-emerald-400 transition hover:text-emerald-300"
+                              >
+                                Düzenle
+                              </Link>
+                            )}
+
+                            <RecordStatusButton
+                              recordId={record.id}
+                              isArchived={Boolean(record.archivedAt)}
+                            />
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {totalPages > 1 && (
+              <nav
+                aria-label="Üretim kayıtları sayfaları"
+                className="mt-5 flex flex-wrap items-center justify-between gap-3"
+              >
+                <p className="text-sm text-slate-400">
+                  {(currentPage - 1) * PAGE_SIZE + 1}-
+                  {Math.min(
+                    currentPage * PAGE_SIZE,
+                    totalRecordCount,
+                  )}{" "}
+                  / {totalRecordCount} kayıt · Sayfa{" "}
+                  {currentPage} / {totalPages}
+                </p>
+
+                <div className="flex items-center gap-3">
+                  {currentPage > 1 ? (
+                    <Link
+                      href={createPageHref(currentPage - 1)}
+                      className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-200 transition hover:bg-slate-800"
+                    >
+                      Önceki
+                    </Link>
+                  ) : (
+                    <span className="cursor-not-allowed rounded-lg border border-slate-800 px-4 py-2 text-sm text-slate-600">
+                      Önceki
+                    </span>
+                  )}
+
+                  {currentPage < totalPages ? (
+                    <Link
+                      href={createPageHref(currentPage + 1)}
+                      className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-200 transition hover:bg-slate-800"
+                    >
+                      Sonraki
+                    </Link>
+                  ) : (
+                    <span className="cursor-not-allowed rounded-lg border border-slate-800 px-4 py-2 text-sm text-slate-600">
+                      Sonraki
+                    </span>
+                  )}
+                </div>
+              </nav>
+            )}
+          </>
         )}
       </div>
     </main>

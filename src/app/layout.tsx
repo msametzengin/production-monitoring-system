@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Üretim Analiz ve Takip Sistemi",
-  description: "Eti Maden Emet üretim analiz ve takip sistemi",
+  description: "Web tabanlı üretim analiz ve takip sistemi",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -29,7 +29,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           <div className="mx-auto flex max-w-7xl flex-col gap-4 px-6 py-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-widest text-emerald-400">
-                Eti Maden Emet
+                Staj Projesi
               </p>
 
               <p className="mt-1 font-semibold">

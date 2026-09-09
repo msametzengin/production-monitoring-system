@@ -224,7 +224,7 @@ export default async function Home({
       <div className="mx-auto max-w-5xl">
         <header className="mb-10">
           <p className="mb-2 text-sm font-semibold uppercase tracking-widest text-emerald-400">
-            Eti Maden Emet
+            Genel Bakış
           </p>
 
           <h1 className="text-3xl font-bold">
