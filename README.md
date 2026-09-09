@@ -313,8 +313,3 @@ npm run build
 ```
 
 Python testleri; eksik günlerin korunması, gerçek sıfır değerleri, birim dönüşümü, geçersiz tarihler, vardiya toplamları ve saatlik üretim oranlarını kapsar.
-
-## Geliştirici
-
-**Mustafa Samet Zengin**<br>
-[GitHub profili](https://github.com/msametzengin)
